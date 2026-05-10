@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="#000000">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Criar Nova Conta"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:layout_marginBottom="32dp" />
+
+        <EditText
+            android:id="@+id/editNomeCadastro"
+            android:layout_width="match_parent"
+            android:layout_height="55dp"
+            android:hint="Nome Completo"
+            android:gravity="center"
+            android:textColor="#000000"
+            android:textColorHint="#666666"
+            android:background="@android:drawable/editbox_background"
+            android:layout_marginBottom="12dp"
+            android:inputType="textPersonName"/>
+
+        <EditText
+            android:id="@+id/editEmailCadastro"
+            android:layout_width="match_parent"
+            android:layout_height="55dp"
+            android:hint="E-mail"
+            android:gravity="center"
+            android:textColor="#000000"
+            android:textColorHint="#666666"
+            android:background="@android:drawable/editbox_background"
+            android:layout_marginBottom="12dp"
+            android:inputType="textEmailAddress"/>
+
+        <EditText
+            android:id="@+id/editSenhaCadastro"
+            android:layout_width="match_parent"
+            android:layout_height="55dp"
+            android:hint="Senha (mínimo 6 caracteres)"
+            android:gravity="center"
+            android:textColor="#000000"
+            android:textColorHint="#666666"
+            android:background="@android:drawable/editbox_background"
+            android:layout_marginBottom="32dp"
+            android:inputType="textPassword"/>
+
+        <Button
+            android:id="@+id/btnFinalizarCadastro"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:text="CADASTRAR"
+            android:backgroundTint="#4CAF50"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"/>
+
+        <TextView
+            android:id="@+id/txtVoltarLogin"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Já tem uma conta? Voltar"
+            android:textColor="#BBBBBB"
+            android:textSize="14sp"
+            android:layout_marginTop="24dp"
+            android:clickable="true"
+            android:focusable="true" />
+
+    </LinearLayout>
+</ScrollView>
