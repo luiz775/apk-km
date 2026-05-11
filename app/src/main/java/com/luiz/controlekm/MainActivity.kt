@@ -37,6 +37,8 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -284,7 +286,8 @@ class MainActivity : AppCompatActivity() {
                     listaDeViagens.add(Viagem(
                         obj.getString("data"), obj.getString("condutor"), obj.getString("destino"),
                         obj.getString("hSaida"), obj.getString("hChegada"),
-                        obj.getInt("kmIni"), obj.getInt("kmFin"), obj.getDouble("custo")
+                        obj.getInt("kmIni"), obj.getInt("kmFin"), obj.getDouble("custo"),
+                        if (obj.has("observacoes")) obj.getString("observacoes") else ""
                     ))
                 }
             } catch (e: Exception) { e.printStackTrace() }
@@ -370,10 +373,12 @@ class MainActivity : AppCompatActivity() {
         editDestino.addTextChangedListener(watcherBotoes)
 
         btnFotoIda.setOnClickListener { 
+            pedindoFotoIda = true
             pedindoFotoDespesa = false
             mostrarDialogoSelecaoImagem(true) 
         }
         btnFotoVolta.setOnClickListener { 
+            pedindoFotoIda = false
             pedindoFotoDespesa = false
             mostrarDialogoSelecaoImagem(false) 
         }
@@ -793,11 +798,62 @@ class MainActivity : AppCompatActivity() {
                 .add(dadosViagem)
                 .addOnSuccessListener {
                     sucessoCount++
+                    // Salva também na Planilha Google
+                    salvarNaPlanilhaGoogle(v)
+                    
                     if (sucessoCount == listaDeViagens.size) {
-                        Toast.makeText(this, "Todas as viagens foram sincronizadas!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Sincronização concluída!", Toast.LENGTH_SHORT).show()
                     }
                 }
         }
+    }
+
+    private fun salvarNaPlanilhaGoogle(v: Viagem) {
+        // ATENÇÃO: Verifique se este link abaixo termina em /exec
+        val scriptUrl = "https://script.google.com/macros/s/AKfycbzisgiY5RLCiBAd2JiIGaEl_2oF8M4xrx0Oi0iJ_-dXuPz3VMzqi3kqfRbpr5pCC9tdPg/exec"
+        
+        if (scriptUrl.contains("SUA_URL")) return
+
+        Thread {
+            try {
+                val url = URL(scriptUrl)
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.doOutput = true
+                conn.instanceFollowRedirects = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0") // Ajuda a evitar bloqueios do Google
+
+                val json = JSONObject().apply {
+                    put("data", v.data)
+                    put("condutor", v.condutor)
+                    put("destino", v.destino)
+                    put("saida", v.hSaida)
+                    put("chegada", v.hChegada)
+                    put("kmIni", v.kmIni)
+                    put("kmFin", v.kmFin)
+                    put("custo", v.custo)
+                    put("obs", v.observacoes)
+                }
+
+                conn.outputStream.use { os ->
+                    os.write(json.toString().toByteArray())
+                }
+
+                // Lê a resposta para garantir que o Google processe
+                val responseCode = conn.responseCode
+                if (responseCode in 200..399) {
+                    val response = conn.inputStream.bufferedReader().use { it.readText() }
+                    println("Google Sheets Response: $response")
+                } else {
+                    val error = conn.errorStream?.bufferedReader()?.use { it.readText() }
+                    println("Google Sheets Error: $error")
+                }
+                conn.disconnect()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }.start()
     }
 
     private fun iniciarCapturaComRecorte(isIda: Boolean, daCamera: Boolean) {
