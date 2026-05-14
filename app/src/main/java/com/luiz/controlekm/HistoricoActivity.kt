@@ -67,6 +67,7 @@ class HistoricoActivity : AppCompatActivity() {
                             fullListaViagens.add(Viagem(
                                 doc.getString("data") ?: "",
                                 doc.getString("condutor") ?: "",
+                                doc.getString("origem") ?: "",
                                 doc.getString("destino") ?: "",
                                 doc.getString("hSaida") ?: "",
                                 doc.getString("hChegada") ?: "",
@@ -102,7 +103,9 @@ class HistoricoActivity : AppCompatActivity() {
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
                 fullListaViagens.add(Viagem(
-                    obj.getString("data"), obj.getString("condutor"), obj.getString("destino"),
+                    obj.getString("data"), obj.getString("condutor"), 
+                    if (obj.has("origem")) obj.getString("origem") else "",
+                    obj.getString("destino"),
                     obj.getString("hSaida"), obj.getString("hChegada"),
                     obj.getInt("kmIni"), obj.getInt("kmFin"), obj.getDouble("custo"),
                     if (obj.has("observacoes")) obj.getString("observacoes") else ""
@@ -137,7 +140,7 @@ class HistoricoActivity : AppCompatActivity() {
 
             val kmTotal = viagem.kmFin - viagem.kmIni
 
-            text1.text = "${viagem.destino} (${viagem.data})"
+            text1.text = "${viagem.origem} > ${viagem.destino} (${viagem.data})"
             text1.setTextColor(Color.WHITE)
             text2.text = "KM: $kmTotal (I: ${viagem.kmIni} F: ${viagem.kmFin}) | R$ ${String.format("%.2f", viagem.custo)}"
             text2.setTextColor(Color.LTGRAY)
@@ -147,6 +150,7 @@ class HistoricoActivity : AppCompatActivity() {
                 val detalhes = """
                     📅 Data: ${viagem.data}
                     👤 Condutor: ${viagem.condutor}
+                    🏁 Origem: ${viagem.origem}
                     📍 Destino: ${viagem.destino}
                     🕒 Saída: ${viagem.hSaida} | Chegada: ${viagem.hChegada}
                     🛣️ KM Inicial: ${viagem.kmIni}

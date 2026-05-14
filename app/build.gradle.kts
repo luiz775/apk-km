@@ -51,6 +51,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.image.cropper)
     implementation(libs.mlkit.text.recognition)
+    implementation(libs.mlkit.document.scanner)
     implementation(libs.mpandroidchart)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -16,8 +16,10 @@ import android.provider.Settings
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
+import android.text.method.DigitsKeyListener
 import android.view.View
 import android.widget.*
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -32,6 +34,11 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.remoteconfig.ktx.remoteConfig
 import com.google.firebase.remoteconfig.ktx.remoteConfigSettings
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.RESULT_FORMAT_JPEG
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.SCANNER_MODE_FULL
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -39,6 +46,7 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -46,6 +54,7 @@ import java.util.*
 data class Viagem(
     val data: String,
     val condutor: String,
+    val origem: String,
     val destino: String,
     val hSaida: String,
     val hChegada: String,
@@ -55,13 +64,22 @@ data class Viagem(
     val observacoes: String = ""
 )
 
+// 2. O "Molde" da Despesa
+data class Despesa(
+    val path: String,
+    val categoria: String,
+    val valor: Double
+)
+
 class MainActivity : AppCompatActivity() {
 
     private val auth by lazy { Firebase.auth }
     private val db by lazy { Firebase.firestore }
 
     private val listaDeViagens = mutableListOf<Viagem>()
+    private lateinit var adapterOrigem: ArrayAdapter<String>
     private lateinit var adapterDestino: ArrayAdapter<String>
+    private val historicoOrigens = mutableListOf<String>()
     private val historicoDestinos = mutableListOf<String>()
     private var ultimoArquivoGerado: File? = null
     
@@ -72,10 +90,12 @@ class MainActivity : AppCompatActivity() {
     private var pedindoFotoIda = true
     private var pedindoFotoDespesa = false
     private val listaFotosDespesas = mutableListOf<String>()
+    private val listaDadosDespesas = mutableListOf<Despesa>()
 
     // UI Elements
     private lateinit var editData: EditText
     private lateinit var editCondutor: EditText
+    private lateinit var editOrigem: AutoCompleteTextView
     private lateinit var editDestino: AutoCompleteTextView
     private lateinit var editHoraSaida: EditText
     private lateinit var editHoraChegada: EditText
@@ -94,6 +114,160 @@ class MainActivity : AppCompatActivity() {
     private lateinit var containerViagens: LinearLayout
     private lateinit var txtOlaUsuario: TextView
 
+    private val scannerOptions = GmsDocumentScannerOptions.Builder()
+        .setResultFormats(RESULT_FORMAT_JPEG)
+        .setScannerMode(SCANNER_MODE_FULL)
+        .setGalleryImportAllowed(true)
+        .build()
+
+    private val scanner = GmsDocumentScanning.getClient(scannerOptions)
+
+    private val scannerLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val scanningResult = GmsDocumentScanningResult.fromActivityResultIntent(result.data)
+            scanningResult?.pages?.get(0)?.imageUri?.let { uri ->
+                mostrarDialogoConfirmacaoScanner(uri)
+            }
+        }
+    }
+
+    private fun mostrarDialogoConfirmacaoScanner(uri: Uri, bitmapParaGirar: Bitmap? = null) {
+        val imageView = ImageView(this)
+        val padding = (20 * resources.displayMetrics.density).toInt()
+        imageView.setPadding(padding, padding, padding, padding)
+        
+        val bitmap = bitmapParaGirar ?: try {
+            val inputStream = contentResolver.openInputStream(uri)
+            BitmapFactory.decodeStream(inputStream)
+        } catch (e: Exception) { null }
+        
+        if (bitmap == null) {
+            Toast.makeText(this, "Erro ao carregar imagem digitalizada", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // Ajusta o tamanho da pré-visualização para não travar o app
+        val scale = 800f / Math.max(bitmap.width, bitmap.height)
+        val previewBitmap = if (scale < 1f) {
+            Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
+        } else {
+            bitmap
+        }
+        
+        imageView.setImageBitmap(previewBitmap)
+
+        AlertDialog.Builder(this)
+            .setTitle("Confirmar Recibo")
+            .setMessage("A imagem está na posição correta?")
+            .setView(imageView)
+            .setPositiveButton("Sim, Salvar") { _, _ ->
+                val path = saveBitmapToFile(bitmap, "DESPESA")
+                if (path != null) {
+                    mostrarDialogoValorDespesa(path)
+                }
+            }
+            .setNeutralButton("Girar 180°") { _, _ ->
+                val matrix = Matrix().apply { postRotate(180f) }
+                val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                mostrarDialogoConfirmacaoScanner(uri, rotated)
+            }
+            .setNegativeButton("Tentar Novamente") { _, _ ->
+                btnFotoDespesa.performClick()
+            }
+            .show()
+    }
+
+    private fun saveBitmapToFile(bitmap: Bitmap, prefix: String): String? {
+        return try {
+            val pasta = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+            val arquivo = File.createTempFile("REGISTRO_${prefix}_", ".jpg", pasta)
+            val outputStream = FileOutputStream(arquivo)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
+            outputStream.flush()
+            outputStream.close()
+            arquivo.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun mostrarDialogoValorDespesa(path: String) {
+        // Na verdade vamos criar um layout customizado rápido via código para não precisar mexer em XML agora
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        layout.setPadding(50, 20, 50, 20)
+
+        val txtCategoria = TextView(this)
+        txtCategoria.text = "Selecione a Categoria:"
+        layout.addView(txtCategoria)
+
+        val spinner = Spinner(this)
+        val categorias = arrayOf("Almoço", "Jantar", "Pernoite", "Outros")
+        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, categorias)
+        layout.addView(spinner)
+
+        val txtValor = TextView(this)
+        txtValor.text = "\nValor (R$):"
+        layout.addView(txtValor)
+
+        val inputValor = EditText(this)
+        inputValor.inputType = InputType.TYPE_CLASS_NUMBER
+        inputValor.keyListener = DigitsKeyListener.getInstance("0123456789,") // Permite explicitamente a vírgula
+        inputValor.hint = "0,00"
+        
+        inputValor.addTextChangedListener(object : TextWatcher {
+            private var current = ""
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (s.toString() != current) {
+                    inputValor.removeTextChangedListener(this)
+                    val cleanString = s.toString().replace("""[R$,.\s]""".toRegex(), "")
+                    if (cleanString.isNotEmpty()) {
+                        try {
+                            val parsed = cleanString.toDouble()
+                            val formatted = NumberFormat.getCurrencyInstance(Locale("pt", "BR")).format(parsed / 100)
+                            current = formatted.replace("R$", "").replace(" ", "").trim()
+                            s?.replace(0, s.length, current)
+                        } catch (e: Exception) { e.printStackTrace() }
+                    } else {
+                        current = ""
+                        s?.clear()
+                    }
+                    inputValor.addTextChangedListener(this)
+                }
+            }
+        })
+        layout.addView(inputValor)
+
+        AlertDialog.Builder(this)
+            .setTitle("Dados da Despesa")
+            .setView(layout)
+            .setCancelable(false)
+            .setPositiveButton("Confirmar") { _, _ ->
+                val categoria = spinner.selectedItem.toString()
+                // Correção: Primeiro removemos os pontos de milhar, depois trocamos a vírgula decimal por ponto
+                val valorTexto = inputValor.text.toString().replace(".", "").replace(",", ".")
+                val valor = valorTexto.toDoubleOrNull() ?: 0.0
+                
+                listaDadosDespesas.add(Despesa(path, categoria, valor))
+                listaFotosDespesas.add(path)
+                
+                btnFotoDespesa.apply {
+                    text = "✅ RECIBO ADICIONADO (${listaFotosDespesas.size})"
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#9C27B0"))
+                }
+                salvarEstado()
+                validarBotoes()
+                Toast.makeText(this, "Despesa salva: R$ $valor", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancelar") { _, _ -> 
+                File(path).delete() // Remove a foto se cancelar
+            }
+            .show()
+    }
+
     private val cropImage = registerForActivityResult(CropImageContract()) { result ->
         if (result.isSuccessful) {
             val uri = result.uriContent
@@ -102,11 +276,7 @@ class MainActivity : AppCompatActivity() {
                 val horaAtual = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
                 
                 if (pedindoFotoDespesa) {
-                    listaFotosDespesas.add(path)
-                    btnFotoDespesa.apply {
-                        text = "✅ RECIBO ADICIONADO (${listaFotosDespesas.size})"
-                        backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#9C27B0"))
-                    }
+                    mostrarDialogoValorDespesa(path)
                 } else if (pedindoFotoIda) {
                     fotoIdaPath = path
                     fotoIdaHora = horaAtual
@@ -155,6 +325,7 @@ class MainActivity : AppCompatActivity() {
 
         editData = findViewById(R.id.editData)
         editCondutor = findViewById(R.id.editCondutor)
+        editOrigem = findViewById(R.id.editOrigem)
         editDestino = findViewById(R.id.editDestino)
         editHoraSaida = findViewById(R.id.editHoraSaida)
         editHoraChegada = findViewById(R.id.editHoraChegada)
@@ -176,28 +347,34 @@ class MainActivity : AppCompatActivity() {
         // --- PERSISTÊNCIA E HISTÓRICO ---
         val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
 
-        val salvos = prefs.getStringSet("historico_destinos", setOf("Dourados > Jardim", "Jardim > Dourados"))
-        historicoDestinos.addAll(salvos!!)
+        // LIMPEZA DO HISTÓRICO ANTIGO (Roda uma vez para limpar as cidades salvas)
+        prefs.edit().remove("historico_origens").remove("historico_destinos").apply()
+
+        val salvosOrigem = prefs.getStringSet("historico_origens", emptySet())
+        historicoOrigens.clear()
+        historicoOrigens.addAll(salvosOrigem!!)
+        adapterOrigem = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, historicoOrigens)
+        editOrigem.setAdapter(adapterOrigem)
+
+        val salvosDestino = prefs.getStringSet("historico_destinos", emptySet())
+        historicoDestinos.clear()
+        historicoDestinos.addAll(salvosDestino!!)
         adapterDestino = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, historicoDestinos)
         editDestino.setAdapter(adapterDestino)
         
         // Mostrar atalhos ao clicar no campo
-        editDestino.setOnClickListener {
-            if (editDestino.text.isEmpty()) {
-                editDestino.showDropDown()
+        listOf(editOrigem, editDestino).forEach { view ->
+            view.setOnClickListener {
+                if (view.text.isEmpty()) view.showDropDown()
             }
-        }
-        
-        editDestino.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus && editDestino.text.isEmpty()) {
-                editDestino.showDropDown()
+            view.setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus && view.text.isEmpty()) view.showDropDown()
             }
         }
 
         // Recupera rascunho e estado salvo
-        val dataAtual = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
-        editData.setText(prefs.getString("rascunho_data", dataAtual))
-        
+        editData.setText(prefs.getString("rascunho_data", ""))
+        editOrigem.setText(prefs.getString("rascunho_origem", ""))
         editDestino.setText(prefs.getString("rascunho_destino", ""))
         
         val horaAtual = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
@@ -258,9 +435,23 @@ class MainActivity : AppCompatActivity() {
         val despesasSalvas = prefs.getString("listaFotosDespesas", "")
         if (!despesasSalvas.isNullOrEmpty()) {
             listaFotosDespesas.addAll(despesasSalvas.split("|").filter { it.isNotEmpty() })
-            if (listaFotosDespesas.isNotEmpty()) {
-                btnFotoDespesa.text = "✅ RECIBO ADICIONADO (${listaFotosDespesas.size})"
-            }
+        }
+        
+        val dadosDespesasSalvas = prefs.getString("listaDadosDespesas", "[]")
+        if (!dadosDespesasSalvas.isNullOrEmpty()) {
+            try {
+                val array = JSONArray(dadosDespesasSalvas)
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    listaDadosDespesas.add(Despesa(
+                        obj.getString("path"), obj.getString("categoria"), obj.getDouble("valor")
+                    ))
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+
+        if (listaFotosDespesas.isNotEmpty()) {
+            btnFotoDespesa.text = "✅ RECIBO ADICIONADO (${listaFotosDespesas.size})"
         }
         
         if (fotoIdaPath != null) {
@@ -284,7 +475,9 @@ class MainActivity : AppCompatActivity() {
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
                     listaDeViagens.add(Viagem(
-                        obj.getString("data"), obj.getString("condutor"), obj.getString("destino"),
+                        obj.getString("data"), obj.getString("condutor"), 
+                        if (obj.has("origem")) obj.getString("origem") else "",
+                        obj.getString("destino"),
                         obj.getString("hSaida"), obj.getString("hChegada"),
                         obj.getInt("kmIni"), obj.getInt("kmFin"), obj.getDouble("custo"),
                         if (obj.has("observacoes")) obj.getString("observacoes") else ""
@@ -370,6 +563,7 @@ class MainActivity : AppCompatActivity() {
         editKmInicial.addTextChangedListener(watcherBotoes)
         editKmFinal.addTextChangedListener(watcherBotoes)
         editCondutor.addTextChangedListener(watcherBotoes)
+        editOrigem.addTextChangedListener(watcherBotoes)
         editDestino.addTextChangedListener(watcherBotoes)
 
         btnFotoIda.setOnClickListener { 
@@ -384,49 +578,90 @@ class MainActivity : AppCompatActivity() {
         }
         btnFotoDespesa.setOnClickListener {
             pedindoFotoDespesa = true
-            mostrarDialogoSelecaoImagem(false) // O boolean isIda não importa aqui pois pedindoFotoDespesa manda
+            scanner.getStartScanIntent(this)
+                .addOnSuccessListener { intentSender ->
+                    scannerLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+                }
+                .addOnFailureListener { e ->
+                    Toast.makeText(this, "Erro ao abrir scanner: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
         }
 
         radioGroupVeiculo.setOnCheckedChangeListener { _, _ -> salvarEstado() }
 
         btnAdicionar.setOnClickListener {
-            val destinoTxt = editDestino.text.toString()
-            val condutorTxt = editCondutor.text.toString()
-            val kmI = editKmInicial.text.toString().toIntOrNull() ?: 0
-            val kmF = editKmFinal.text.toString().toIntOrNull() ?: 0
+            val dataTxt = editData.text.toString().trim()
+            val condutorTxt = editCondutor.text.toString().trim()
+            val origemTxt = editOrigem.text.toString().trim()
+            val destinoTxt = editDestino.text.toString().trim()
+            val saidaTxt = editHoraSaida.text.toString().trim()
+            val chegadaTxt = editHoraChegada.text.toString().trim()
+            val kmITxt = editKmInicial.text.toString().trim()
+            val kmFTxt = editKmFinal.text.toString().trim()
+
+            // Verificação de campos obrigatórios
+            val camposFaltando = mutableListOf<String>()
+            if (dataTxt.isEmpty()) camposFaltando.add("Data")
+            if (condutorTxt.isEmpty()) camposFaltando.add("Condutor")
+            if (origemTxt.isEmpty()) camposFaltando.add("Origem")
+            if (destinoTxt.isEmpty()) camposFaltando.add("Destino")
+            if (saidaTxt.isEmpty()) camposFaltando.add("Hora de Saída")
+            if (chegadaTxt.isEmpty()) camposFaltando.add("Hora de Chegada")
+            if (kmITxt.isEmpty()) camposFaltando.add("KM Inicial")
+            if (kmFTxt.isEmpty()) camposFaltando.add("KM Final")
+
+            if (camposFaltando.isNotEmpty()) {
+                AlertDialog.Builder(this)
+                    .setTitle("Campos Obrigatórios")
+                    .setMessage("Por favor, preencha os seguintes campos antes de adicionar:\n\n• ${camposFaltando.joinToString("\n• ")}")
+                    .setPositiveButton("Entendido", null)
+                    .show()
+                return@setOnClickListener
+            }
+
+            val kmI = kmITxt.toIntOrNull() ?: 0
+            val kmF = kmFTxt.toIntOrNull() ?: 0
 
             if (kmI > kmF) {
-                Toast.makeText(this, "Erro: KM inicial não pode ser maior que o final!", Toast.LENGTH_LONG).show()
+                AlertDialog.Builder(this)
+                    .setTitle("Quilometragem Inválida")
+                    .setMessage("O KM inicial não pode ser maior que o KM final!")
+                    .setPositiveButton("Corrigir", null)
+                    .show()
                 return@setOnClickListener
             }
 
             val kmTotal = kmF - kmI
 
-            // Salva no histórico de destinos (atalhos) - Case Insensitive
-            val destinoExistente = historicoDestinos.any { it.equals(destinoTxt, ignoreCase = true) }
-            if (destinoTxt.isNotEmpty() && !destinoExistente) {
+            // Salva no histórico de origens
+            if (origemTxt.isNotEmpty() && !historicoOrigens.any { it.equals(origemTxt, ignoreCase = true) }) {
+                historicoOrigens.add(origemTxt)
+                historicoOrigens.sort()
+                adapterOrigem.notifyDataSetChanged()
+            }
+
+            // Salva no histórico de destinos
+            if (destinoTxt.isNotEmpty() && !historicoDestinos.any { it.equals(destinoTxt, ignoreCase = true) }) {
                 historicoDestinos.add(destinoTxt)
-                // Ordena para ficar organizado
                 historicoDestinos.sort()
                 adapterDestino.notifyDataSetChanged()
             }
 
             val v = Viagem(
-                editData.text.toString(), editCondutor.text.toString(), destinoTxt,
-                editHoraSaida.text.toString(), editHoraChegada.text.toString(),
+                dataTxt, condutorTxt, origemTxt, destinoTxt,
+                saidaTxt, chegadaTxt,
                 kmI, kmF, kmTotal * 1.20, editObservacoes.text.toString()
             )
 
             listaDeViagens.add(v)
             
-            // Salva no histórico permanente local também (vinculado ao UID do usuário)
+            // Salva no histórico permanente local
             val currentUser = auth.currentUser
             val historicoKey = if (currentUser != null) "historico_local_${currentUser.uid}" else "historico_geral_local"
-            
             val historicoGeral = prefs.getString(historicoKey, "[]")
             val arrayHistorico = JSONArray(historicoGeral)
             val obj = JSONObject().apply {
-                put("data", v.data); put("condutor", v.condutor); put("destino", v.destino)
+                put("data", v.data); put("condutor", v.condutor); put("origem", v.origem); put("destino", v.destino)
                 put("hSaida", v.hSaida); put("hChegada", v.hChegada)
                 put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
                 put("observacoes", v.observacoes)
@@ -436,6 +671,7 @@ class MainActivity : AppCompatActivity() {
 
             Toast.makeText(this, "Viagem adicionada!", Toast.LENGTH_SHORT).show()
 
+            editOrigem.text.clear()
             editDestino.text.clear()
             editObservacoes.text.clear()
             editHoraSaida.text.clear()
@@ -449,8 +685,21 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnGerarPdf.setOnClickListener {
-            if (listaDeViagens.isEmpty()) Toast.makeText(this, "Lista vazia!", Toast.LENGTH_SHORT).show()
-            else if (fotoVoltaPath == null) Toast.makeText(this, "Tire a foto da volta primeiro!", Toast.LENGTH_SHORT).show()
+            if (listaDeViagens.isEmpty()) {
+                AlertDialog.Builder(this)
+                    .setTitle("Relatório Vazio")
+                    .setMessage("Adicione pelo menos uma viagem à lista antes de gerar o PDF.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+            else if (fotoVoltaPath == null) {
+                AlertDialog.Builder(this)
+                    .setTitle("Foto Pendente")
+                    .setMessage("Você esqueceu de tirar a FOTO DA VOLTA. Ela é necessária para finalizar o relatório.")
+                    .setPositiveButton("Tirar Foto") { _, _ -> btnFotoVolta.performClick() }
+                    .setNegativeButton("Cancelar", null)
+                    .show()
+            }
             else {
                 sincronizarViagensComFirestore()
                 gerarRelatorioCompleto(listaDeViagens)
@@ -480,8 +729,11 @@ class MainActivity : AppCompatActivity() {
                     fotoIdaHora = null
                     fotoVoltaHora = null
                     listaFotosDespesas.clear()
+                    listaDadosDespesas.clear()
                     listaDeViagens.clear()
                     
+                    editData.text.clear()
+                    editOrigem.text.clear()
                     editDestino.text.clear()
                     editObservacoes.text.clear()
                     editHoraSaida.text.clear()
@@ -604,7 +856,7 @@ class MainActivity : AppCompatActivity() {
             val text1 = view.findViewById<TextView>(android.R.id.text1)
             val text2 = view.findViewById<TextView>(android.R.id.text2)
             
-            text1.text = "${viagem.destino} (${viagem.data})"
+            text1.text = "${viagem.origem} > ${viagem.destino} (${viagem.data})"
             text1.setTextColor(Color.WHITE)
             
             val kmTotal = viagem.kmFin - viagem.kmIni
@@ -638,10 +890,12 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().apply {
             putString("rascunho_data", editData.text.toString())
             putString("rascunho_condutor", editCondutor.text.toString())
+            putString("rascunho_origem", editOrigem.text.toString())
             putString("rascunho_destino", editDestino.text.toString())
             putString("rascunho_hSaida", editHoraSaida.text.toString())
             putString("rascunho_kmIni", editKmInicial.text.toString())
             putString("rascunho_obs", editObservacoes.text.toString())
+            putStringSet("historico_origens", historicoOrigens.toSet())
             putStringSet("historico_destinos", historicoDestinos.toSet())
             putBoolean("veiculo_empresa", findViewById<RadioButton>(R.id.radioEmpresa).isChecked)
             
@@ -651,10 +905,19 @@ class MainActivity : AppCompatActivity() {
             putString("fotoVoltaHora", fotoVoltaHora)
             putString("listaFotosDespesas", listaFotosDespesas.joinToString("|"))
             
+            val arrayDadosDesp = JSONArray()
+            listaDadosDespesas.forEach { d ->
+                val obj = JSONObject().apply {
+                    put("path", d.path); put("categoria", d.categoria); put("valor", d.valor)
+                }
+                arrayDadosDesp.put(obj)
+            }
+            putString("listaDadosDespesas", arrayDadosDesp.toString())
+            
             val array = JSONArray()
             listaDeViagens.forEach { v ->
                 val obj = JSONObject().apply {
-                    put("data", v.data); put("condutor", v.condutor); put("destino", v.destino)
+                    put("data", v.data); put("condutor", v.condutor); put("origem", v.origem); put("destino", v.destino)
                     put("hSaida", v.hSaida); put("hChegada", v.hChegada)
                     put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
                     put("observacoes", v.observacoes)
@@ -677,14 +940,15 @@ class MainActivity : AppCompatActivity() {
 
         val temErro = erroKmAtual || erroKmHistorico
         val temFotoIda = fotoIdaPath != null
+        val temOrigem = editOrigem.text.toString().trim().isNotEmpty()
         val temDestino = editDestino.text.toString().trim().isNotEmpty()
 
         // PRIORIDADE: Só libera os campos se tiver foto de ida
-        val layoutCampos = listOf(editData, editCondutor, editDestino, editHoraSaida, editHoraChegada, editKmInicial, editKmFinal, editObservacoes)
+        val layoutCampos = listOf(editData, editCondutor, editOrigem, editDestino, editHoraSaida, editHoraChegada, editKmInicial, editKmFinal, editObservacoes)
         layoutCampos.forEach { it.isEnabled = temFotoIda }
         
         btnFotoDespesa.isEnabled = temFotoIda
-        btnAdicionar.isEnabled = !temErro && temFotoIda && temDestino
+        btnAdicionar.isEnabled = !temErro && temFotoIda && temOrigem && temDestino
         
         val canGerar = listaDeViagens.isNotEmpty() && fotoVoltaPath != null && !temErro
         btnGerarPdf.isEnabled = canGerar
@@ -735,6 +999,7 @@ class MainActivity : AppCompatActivity() {
                                         viagensHistorico.add(Viagem(
                                             doc.getString("data") ?: "",
                                             doc.getString("condutor") ?: "",
+                                            doc.getString("origem") ?: "",
                                             doc.getString("destino") ?: "",
                                             doc.getString("hSaida") ?: "",
                                             doc.getString("hChegada") ?: "",
@@ -777,13 +1042,20 @@ class MainActivity : AppCompatActivity() {
         }
 
         Toast.makeText(this, "Sincronizando...", Toast.LENGTH_SHORT).show()
-        var sucessoCount = 0
+        
+        // CORREÇÃO: Criamos uma CÓPIA da lista (.toList()) para o envio
+        val copiaParaEnvio = listaDeViagens.toList()
+        val copiaDespesas = listaDadosDespesas.toList()
+        salvarNaPlanilhaGoogle(copiaParaEnvio, copiaDespesas)
 
-        listaDeViagens.forEach { v ->
+        // Envia para o Firestore individualmente
+        var sucessoCount = 0
+        copiaParaEnvio.forEach { v ->
             val dadosViagem = hashMapOf(
                 "tecnicoId" to currentUser.uid,
                 "data" to v.data,
                 "condutor" to v.condutor,
+                "origem" to v.origem,
                 "destino" to v.destino,
                 "hSaida" to v.hSaida,
                 "hChegada" to v.hChegada,
@@ -798,21 +1070,17 @@ class MainActivity : AppCompatActivity() {
                 .add(dadosViagem)
                 .addOnSuccessListener {
                     sucessoCount++
-                    // Salva também na Planilha Google
-                    salvarNaPlanilhaGoogle(v)
-                    
-                    if (sucessoCount == listaDeViagens.size) {
+                    if (sucessoCount == copiaParaEnvio.size) {
                         Toast.makeText(this, "Sincronização concluída!", Toast.LENGTH_SHORT).show()
                     }
                 }
         }
     }
 
-    private fun salvarNaPlanilhaGoogle(v: Viagem) {
-        // ATENÇÃO: Verifique se este link abaixo termina em /exec
-        val scriptUrl = "https://script.google.com/macros/s/AKfycbzisgiY5RLCiBAd2JiIGaEl_2oF8M4xrx0Oi0iJ_-dXuPz3VMzqi3kqfRbpr5pCC9tdPg/exec"
+    private fun salvarNaPlanilhaGoogle(viagens: List<Viagem>, despesas: List<Despesa> = emptyList()) {
+        val scriptUrl = "https://script.google.com/macros/s/AKfycbz-vPT7DHjux2zBzc2PAo6a3O99rb4aE70xjdWVtcnNIbR00S1045Fa15lwe-J58Yhs/exec"
         
-        if (scriptUrl.contains("SUA_URL")) return
+        if (scriptUrl.isEmpty() || scriptUrl.contains("SUA_URL")) return
 
         Thread {
             try {
@@ -822,32 +1090,54 @@ class MainActivity : AppCompatActivity() {
                 conn.doOutput = true
                 conn.instanceFollowRedirects = true
                 conn.setRequestProperty("Content-Type", "application/json")
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0") // Ajuda a evitar bloqueios do Google
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
 
-                val json = JSONObject().apply {
-                    put("data", v.data)
-                    put("condutor", v.condutor)
-                    put("destino", v.destino)
-                    put("saida", v.hSaida)
-                    put("chegada", v.hChegada)
-                    put("kmIni", v.kmIni)
-                    put("kmFin", v.kmFin)
-                    put("custo", v.custo)
-                    put("obs", v.observacoes)
+                // Geramos um ID único baseado no horário da primeira viagem da lista
+                val loteId = if (viagens.isNotEmpty()) viagens[0].hSaida.replace(":", "") else "0000"
+
+                val jsonEnvio = JSONObject()
+                jsonEnvio.put("loteId", loteId)
+                
+                val jsonViagens = JSONArray()
+                viagens.forEach { v ->
+                    val obj = JSONObject().apply {
+                        put("data", v.data)
+                        put("condutor", v.condutor)
+                        put("origem", v.origem)
+                        put("destino", v.destino)
+                        put("saida", v.hSaida)
+                        put("chegada", v.hChegada)
+                        put("kmIni", v.kmIni)
+                        put("kmFin", v.kmFin)
+                        put("custo", v.custo)
+                        put("obs", v.observacoes)
+                    }
+                    jsonViagens.put(obj)
                 }
+                jsonEnvio.put("viagens", jsonViagens)
+
+                val jsonDespesas = JSONArray()
+                despesas.forEach { d ->
+                    val obj = JSONObject().apply {
+                        put("categoria", d.categoria)
+                        put("valor", d.valor)
+                    }
+                    jsonDespesas.put(obj)
+                }
+                jsonEnvio.put("despesas", jsonDespesas)
 
                 conn.outputStream.use { os ->
-                    os.write(json.toString().toByteArray())
+                    os.write(jsonEnvio.toString().toByteArray())
                 }
 
-                // Lê a resposta para garantir que o Google processe
+                // O Google Apps Script exige que leiamos a resposta para processar
                 val responseCode = conn.responseCode
                 if (responseCode in 200..399) {
-                    val response = conn.inputStream.bufferedReader().use { it.readText() }
-                    println("Google Sheets Response: $response")
+                    val inputContent = conn.inputStream.bufferedReader().use { it.readText() }
+                    println("Google Success: $inputContent")
                 } else {
-                    val error = conn.errorStream?.bufferedReader()?.use { it.readText() }
-                    println("Google Sheets Error: $error")
+                    val errorContent = conn.errorStream?.bufferedReader()?.use { it.readText() }
+                    println("Google Error: $errorContent")
                 }
                 conn.disconnect()
             } catch (e: Exception) {
@@ -863,14 +1153,18 @@ class MainActivity : AppCompatActivity() {
             guidelines = CropImageView.Guidelines.ON,
             activityTitle = if (pedindoFotoDespesa) "Recortar Recibo" else "Ajustar Foto de KM",
             fixAspectRatio = !pedindoFotoDespesa,
-            aspectRatioX = 3,      // Formato mais "comprido" (3:1)
-            aspectRatioY = 1,      // Foca melhor nos números
-            initialCropWindowPaddingRatio = 0.2f, // Começa menor na tela
+            aspectRatioX = if (pedindoFotoDespesa) 1 else 3,
+            aspectRatioY = 1,
+            initialCropWindowPaddingRatio = 0.2f, 
             imageSourceIncludeCamera = daCamera,
             imageSourceIncludeGallery = !daCamera,
             activityMenuIconColor = Color.WHITE,
             allowRotation = true,
-            allowFlipping = true
+            allowFlipping = true,
+            outputRequestWidth = 1280, // ALTA QUALIDADE: Força 1280px de largura
+            outputRequestHeight = 0,    // Mantém a proporção original
+            outputCompressFormat = Bitmap.CompressFormat.JPEG,
+            outputCompressQuality = 90 // ALTA QUALIDADE: 90%
         )
         
         cropImage.launch(CropImageContractOptions(uri = null, cropImageOptions = options))
@@ -931,11 +1225,12 @@ class MainActivity : AppCompatActivity() {
         startActivity(Intent.createChooser(intent, "Compartilhar Relatório"))
     }
 
-    private fun desenharTextoComQuebra(canvas: Canvas, texto: String, x: Float, y: Float, paint: Paint, larguraMax: Int) {
+    private fun desenharTextoComQuebra(canvas: Canvas, texto: String, x: Float, y: Float, paint: Paint, larguraMax: Int): Float {
         // Divide o texto priorizando espaços, mas mantendo o símbolo '>' como ponto de quebra
         val palavras = texto.replace(">", " > ").split(" ").filter { it.isNotEmpty() }
         var linhaAtual = ""
         var yOffset = 0f
+        var maiorYOffset = 0f
 
         for (palavra in palavras) {
             val testeLinha = if (linhaAtual.isEmpty()) palavra else "$linhaAtual $palavra"
@@ -947,17 +1242,20 @@ class MainActivity : AppCompatActivity() {
                     canvas.drawText(linhaAtual, x, y + yOffset, paint)
                     yOffset += 11f // Altura da linha
                     linhaAtual = palavra
+                    maiorYOffset = yOffset
                 } else {
                     // Se a palavra sozinha for maior que o limite (raro), quebra ela
                     canvas.drawText(palavra.take(larguraMax), x, y + yOffset, paint)
                     yOffset += 11f
                     linhaAtual = palavra.drop(larguraMax)
+                    maiorYOffset = yOffset
                 }
             }
         }
         if (linhaAtual.isNotEmpty()) {
             canvas.drawText(linhaAtual, x, y + yOffset, paint)
         }
+        return maiorYOffset
     }
 
     private fun gerarRelatorioCompleto(viagens: List<Viagem>, isExportacaoHistorico: Boolean = false) {
@@ -1022,22 +1320,24 @@ class MainActivity : AppCompatActivity() {
         desenharFotoFinal(fotoIdaPath, 60f, yFotos, "KM INICIAL (IDA)", fotoIdaHora)
         desenharFotoFinal(fotoVoltaPath, 315f, yFotos, "KM FINAL (VOLTA)", fotoVoltaHora)
 
-        // --- TABELA DE DADOS (ABAIXO DAS FOTOS COM ESPAÇO DE 5CM) ---
+        // --- TABELA DE DADOS (SUBIU PARA DIMINUIR O ESPAÇO EM BRANCO) ---
         val isParticular = findViewById<RadioButton>(R.id.radioParticular).isChecked
         
-        paint.textSize = 8f
+        paint.textSize = 7f 
         paint.isFakeBoldText = true
         paint.textAlign = Paint.Align.CENTER
-        val yHeader = 360f // Aumentado de 220f para 360f para criar o espaço de ~5cm
-        canvas1.drawText("DATA", 35f, yHeader, paint)
-        canvas1.drawText("COND.", 80f, yHeader, paint)
-        canvas1.drawText("DESTINO", 160f, yHeader, paint)
-        canvas1.drawText("OBS.", 250f, yHeader, paint)
+        val yHeader = 230f 
+        canvas1.drawText("DATA", 30f, yHeader, paint)
+        canvas1.drawText("COND.", 65f, yHeader, paint)
+        canvas1.drawText("ORIGEM", 105f, yHeader, paint)
+        canvas1.drawText("DESTINO", 165f, yHeader, paint)
+        canvas1.drawText("OBS.", 235f, yHeader, paint)
         canvas1.drawText("SAÍDA", 330f, yHeader, paint)
-        canvas1.drawText("CHEG.", 375f, yHeader, paint)
-        canvas1.drawText("KMI", 420f, yHeader, paint)
-        canvas1.drawText("KMF", 460f, yHeader, paint)
-        canvas1.drawText("TOTAL", 505f, yHeader, paint)
+        canvas1.drawText("CHEG.", 370f, yHeader, paint)
+        canvas1.drawText("KMI", 405f, yHeader, paint)
+        canvas1.drawText("KMF", 440f, yHeader, paint)
+        canvas1.drawText("URB.", 475f, yHeader, paint) // Nova coluna compacta
+        canvas1.drawText("TOTAL", 515f, yHeader, paint)
         
         if (isParticular) {
             canvas1.drawText("CUSTO", 560f, yHeader, paint)
@@ -1050,51 +1350,50 @@ class MainActivity : AppCompatActivity() {
         var custoGeral = 0.0
         paint.isFakeBoldText = false
         var yPos = yHeader + 35f
-        var ultimoKmFinal = -1
 
-        for (v in viagens) {
-            // DETECÇÃO DE KM EM CIDADE
-            if (ultimoKmFinal != -1 && v.kmIni > ultimoKmFinal) {
-                val kmCidadeTrecho = v.kmIni - ultimoKmFinal
-                
-                paint.color = Color.GRAY // Cor cinza para diferenciar
-                canvas1.drawText(v.data, 35f, yPos, paint)
-                canvas1.drawText("-", 80f, yPos, paint)
-                canvas1.drawText("Deslocamento Urbano", 160f, yPos, paint)
-                canvas1.drawText("-", 250f, yPos, paint)
-                canvas1.drawText("-", 330f, yPos, paint)
-                canvas1.drawText("-", 375f, yPos, paint)
-                canvas1.drawText(ultimoKmFinal.toString(), 420f, yPos, paint)
-                canvas1.drawText(v.kmIni.toString(), 460f, yPos, paint)
-                canvas1.drawText(kmCidadeTrecho.toString(), 505f, yPos, paint)
-                
-                if (isParticular) {
-                    canvas1.drawText(String.format("%.2f", kmCidadeTrecho * 1.20), 560f, yPos, paint)
+        for (index in viagens.indices) {
+            val v = viagens[index]
+            
+            val nomeAbreviado = try {
+                val partes = v.condutor.trim().split(" ")
+                if (partes.size > 1) "${partes[0]} ${partes[1].take(1)}." else partes[0]
+            } catch (e: Exception) { v.condutor }
+
+            // LÓGICA DE OLHAR PARA FRENTE: O KM Urbano vai para a viagem que chegou no destino
+            var kmUrbano = 0
+            if (index < viagens.size - 1) {
+                val vProx = viagens[index + 1]
+                if (vProx.kmIni > v.kmFin) {
+                    kmUrbano = vProx.kmIni - v.kmFin
                 }
-                
-                kmSomaCidade += kmCidadeTrecho
-                paint.color = Color.BLACK
-                yPos += 25f 
             }
 
-            canvas1.drawText(v.data, 35f, yPos, paint)
-            canvas1.drawText(v.condutor.take(8), 80f, yPos, paint)
-            desenharTextoComQuebra(canvas1, v.destino, 160f, yPos, paint, 18)
-            desenharTextoComQuebra(canvas1, v.observacoes, 250f, yPos, paint, 18)
+            canvas1.drawText(v.data, 30f, yPos, paint)
+            canvas1.drawText(nomeAbreviado.take(12), 65f, yPos, paint)
+            val offsetOrigem = desenharTextoComQuebra(canvas1, v.origem, 105f, yPos, paint, 14)
+            val offsetDestino = desenharTextoComQuebra(canvas1, v.destino, 165f, yPos, paint, 14)
+            val offsetObs = desenharTextoComQuebra(canvas1, v.observacoes, 235f, yPos, paint, 16)
+            
             canvas1.drawText(v.hSaida, 330f, yPos, paint)
-            canvas1.drawText(v.hChegada, 375f, yPos, paint)
-            canvas1.drawText(v.kmIni.toString(), 420f, yPos, paint)
-            canvas1.drawText(v.kmFin.toString(), 460f, yPos, paint)
-            val totalViagem = v.kmFin - v.kmIni
-            canvas1.drawText("$totalViagem", 505f, yPos, paint)
+            canvas1.drawText(v.hChegada, 370f, yPos, paint)
+            canvas1.drawText(v.kmIni.toString(), 405f, yPos, paint)
+            canvas1.drawText(v.kmFin.toString(), 440f, yPos, paint)
+            canvas1.drawText(kmUrbano.toString(), 475f, yPos, paint)
+            
+            val totalViagem = (v.kmFin - v.kmIni) + kmUrbano
+            canvas1.drawText(totalViagem.toString(), 515f, yPos, paint)
             
             if (isParticular) {
-                canvas1.drawText(String.format("%.2f", v.custo), 560f, yPos, paint)
+                val custoCalculado = totalViagem * 1.20
+                canvas1.drawText(String.format("%.2f", custoCalculado), 560f, yPos, paint)
             }
             
-            kmSomaViagens += totalViagem
-            ultimoKmFinal = v.kmFin
-            yPos += 30f
+            kmSomaViagens += (v.kmFin - v.kmIni)
+            kmSomaCidade += kmUrbano
+            
+            val saltoLinha = Math.max(offsetOrigem, Math.max(offsetDestino, offsetObs))
+            yPos += 30f + saltoLinha
+
             if (yPos > 780f) break 
         }
 
@@ -1118,9 +1417,9 @@ class MainActivity : AppCompatActivity() {
         }
         canvas1.drawText(resumoTotal, 570f, yPos, paint)
 
-        // --- SEÇÃO DE COMPROVANTES DE DESPESAS (ÁREA MARCADA) ---
+        // --- SEÇÃO DE COMPROVANTES DE DESPESAS (FOTOS MAIORES E MELHOR QUALIDADE) ---
         if (listaFotosDespesas.isNotEmpty()) {
-            yPos += 40f
+            yPos += 70f // Aumentado de 40f para 70f para descer a seção
             paint.textAlign = Paint.Align.LEFT
             paint.textSize = 10f
             paint.isFakeBoldText = true
@@ -1128,33 +1427,39 @@ class MainActivity : AppCompatActivity() {
             
             yPos += 15f
             var xPosRecibo = 40f
-            val reciboWidth = 120f
-            val reciboHeight = 120f // Quadrado para recibos costuma ser melhor
+            val reciboWidth = 230f // Aumentado de 120f para 230f
+            val reciboHeight = 230f // Aumentado de 120f para 230f
+            
+            val paintQualidade = Paint().apply {
+                isFilterBitmap = true
+                isAntiAlias = true
+                isDither = true
+            }
             
             for (path in listaFotosDespesas) {
                 val bitmap = BitmapFactory.decodeFile(path) ?: continue
                 
                 val destRect = RectF(xPosRecibo, yPos, xPosRecibo + reciboWidth, yPos + reciboHeight)
-                canvas1.drawBitmap(bitmap, null, destRect, null)
+                canvas1.drawBitmap(bitmap, null, destRect, paintQualidade)
                 
                 bitmap.recycle()
                 
-                xPosRecibo += reciboWidth + 10f
+                xPosRecibo += reciboWidth + 20f
                 // Se chegar no fim da linha, pula para a de baixo
-                if (xPosRecibo > 500f) {
+                if (xPosRecibo + reciboWidth > 580f) {
                     xPosRecibo = 40f
-                    yPos += reciboHeight + 10f
+                    yPos += reciboHeight + 20f
                 }
                 
                 // Evita desenhar fora da página
-                if (yPos > 750f) break 
+                if (yPos + reciboHeight > 800f) break
             }
         }
 
-        paint.textSize = 10f
+        paint.textSize = 8f // Reduzido de 10f para 8f
         paint.isFakeBoldText = false
-        paint.textAlign = Paint.Align.CENTER
-        canvas1.drawText("Aplicativo criado por Luiz Gustavo", 297f, 820f, paint)
+        paint.textAlign = Paint.Align.RIGHT // Alinhado à direita
+        canvas1.drawText("Aplicativo criado por Luiz Gustavo", 575f, 825f, paint) // Movido para o canto inferior direito
         document.finishPage(page1)
 
         val pasta = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
@@ -1179,7 +1484,7 @@ class MainActivity : AppCompatActivity() {
             ultimoArquivoGerado = arquivo
             btnCompartilhar.visibility = View.VISIBLE
             validarBotoes() // Atualiza o estado habilitado do botão
-            salvarEstado() // Salva o estado limpo ou atualizado
+            salvarEstado() // Salva o estado limpo ou updated
             
             // Abre automaticamente a janela de compartilhamento/salvamento
             compartilharArquivo(arquivo)
