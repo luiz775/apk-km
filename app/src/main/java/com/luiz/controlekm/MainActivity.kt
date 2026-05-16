@@ -34,6 +34,7 @@ import com.canhub.cropper.CropImageContractOptions
 import com.canhub.cropper.CropImageOptions
 import com.canhub.cropper.CropImageView
 import com.google.android.gms.location.LocationServices
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ktx.firestore
@@ -122,6 +123,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtViagensCount: TextView
     private lateinit var mainScrollView: ScrollView
     
+    // Dashboard elements
+    private lateinit var txtDashKmTotal: TextView
+    private lateinit var txtDashCustoTotal: TextView
+    private lateinit var txtDashRecibosTotal: TextView
+    
     private lateinit var btnGpsOrigem: ImageButton
     private lateinit var btnGpsDestino: ImageButton
     private val fusedLocationClient by lazy { LocationServices.getFusedLocationProviderClient(this) }
@@ -144,9 +150,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun mostrarDialogoConfirmacaoScanner(uri: Uri, bitmapParaGirar: Bitmap? = null) {
-        val imageView = ImageView(this)
-        val padding = (20 * resources.displayMetrics.density).toInt()
-        imageView.setPadding(padding, padding, padding, padding)
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.layout_dialog_confirmar_scan, null)
+        dialog.setContentView(view)
+        
+        val imgPreview = view.findViewById<ImageView>(R.id.imgPreviewScan)
+        val btnSim = view.findViewById<Button>(R.id.btnConfirmarScan)
+        val btnGirar = view.findViewById<Button>(R.id.btnGirarScan)
+        val btnRepetir = view.findViewById<Button>(R.id.btnRepetirScan)
         
         val bitmap = bitmapParaGirar ?: try {
             val inputStream = contentResolver.openInputStream(uri)
@@ -154,39 +165,31 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) { null }
         
         if (bitmap == null) {
-            Toast.makeText(this, "Erro ao carregar imagem digitalizada", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Erro ao carregar imagem", Toast.LENGTH_SHORT).show()
             return
         }
         
-        // Ajusta o tamanho da pré-visualização para não travar o app
-        val scale = 800f / Math.max(bitmap.width, bitmap.height)
-        val previewBitmap = if (scale < 1f) {
-            Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
-        } else {
-            bitmap
-        }
-        
-        imageView.setImageBitmap(previewBitmap)
+        imgPreview.setImageBitmap(bitmap)
 
-        AlertDialog.Builder(this)
-            .setTitle("Confirmar Recibo")
-            .setMessage("A imagem está na posição correta?")
-            .setView(imageView)
-            .setPositiveButton("Sim, Salvar") { _, _ ->
-                val path = saveBitmapToFile(bitmap, "DESPESA")
-                if (path != null) {
-                    mostrarDialogoValorDespesa(path)
-                }
-            }
-            .setNeutralButton("Girar 180°") { _, _ ->
-                val matrix = Matrix().apply { postRotate(180f) }
-                val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-                mostrarDialogoConfirmacaoScanner(uri, rotated)
-            }
-            .setNegativeButton("Tentar Novamente") { _, _ ->
-                btnFotoDespesa.performClick()
-            }
-            .show()
+        btnSim.setOnClickListener {
+            dialog.dismiss()
+            val path = saveBitmapToFile(bitmap, "DESPESA")
+            if (path != null) mostrarDialogoValorDespesa(path)
+        }
+
+        btnGirar.setOnClickListener {
+            dialog.dismiss()
+            val matrix = Matrix().apply { postRotate(180f) }
+            val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            mostrarDialogoConfirmacaoScanner(uri, rotated)
+        }
+
+        btnRepetir.setOnClickListener {
+            dialog.dismiss()
+            btnFotoDespesa.performClick()
+        }
+
+        dialog.show()
     }
 
     private fun saveBitmapToFile(bitmap: Bitmap, prefix: String): String? {
@@ -205,80 +208,73 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun mostrarDialogoValorDespesa(path: String) {
-        // Na verdade vamos criar um layout customizado rápido via código para não precisar mexer em XML agora
-        val layout = LinearLayout(this)
-        layout.orientation = LinearLayout.VERTICAL
-        layout.setPadding(50, 20, 50, 20)
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.layout_dialog_despesa, null)
+        dialog.setContentView(view)
 
-        val txtCategoria = TextView(this)
-        txtCategoria.text = "Selecione a Categoria:"
-        layout.addView(txtCategoria)
+        val spinner = view.findViewById<Spinner>(R.id.spinnerCategoria)
+        val inputValor = view.findViewById<EditText>(R.id.inputValorDespesa)
+        val btnConfirmar = view.findViewById<Button>(R.id.btnConfirmarDespesa)
+        val btnCancelar = view.findViewById<Button>(R.id.btnCancelarDespesa)
 
-        val spinner = Spinner(this)
         val categorias = arrayOf("Almoço", "Jantar", "Pernoite", "Outros")
         spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, categorias)
-        layout.addView(spinner)
 
-        val txtValor = TextView(this)
-        txtValor.text = "\nValor (R$):"
-        layout.addView(txtValor)
-
-        val inputValor = EditText(this)
+        // Máscara de moeda corrigida
         inputValor.inputType = InputType.TYPE_CLASS_NUMBER
-        inputValor.keyListener = DigitsKeyListener.getInstance("0123456789,") // Permite explicitamente a vírgula
-        inputValor.hint = "0,00"
-        
+        inputValor.keyListener = DigitsKeyListener.getInstance("0123456789,")
+
         inputValor.addTextChangedListener(object : TextWatcher {
-            private var current = ""
+            private var isUpdating = false
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                if (s.toString() != current) {
-                    inputValor.removeTextChangedListener(this)
-                    val cleanString = s.toString().replace("""[R$,.\s]""".toRegex(), "")
-                    if (cleanString.isNotEmpty()) {
-                        try {
-                            val parsed = cleanString.toDouble()
-                            val formatted = NumberFormat.getCurrencyInstance(Locale("pt", "BR")).format(parsed / 100)
-                            current = formatted.replace("R$", "").replace(" ", "").trim()
-                            s?.replace(0, s.length, current)
-                        } catch (e: Exception) { e.printStackTrace() }
-                    } else {
-                        current = ""
-                        s?.clear()
-                    }
-                    inputValor.addTextChangedListener(this)
+                if (isUpdating) return
+                isUpdating = true
+
+                val str = s.toString().replace("""[^0-9]""".toRegex(), "")
+                if (str.isNotEmpty()) {
+                    try {
+                        val doubleValue = str.toDouble() / 100.0
+                        val formatted = String.format(Locale("pt", "BR"), "%,.2f", doubleValue)
+                        s?.replace(0, s.length, formatted)
+                        inputValor.setSelection(inputValor.text.length)
+                    } catch (e: Exception) { }
+                } else {
+                    s?.clear()
                 }
+
+                isUpdating = false
             }
         })
-        layout.addView(inputValor)
 
-        AlertDialog.Builder(this)
-            .setTitle("Dados da Despesa")
-            .setView(layout)
-            .setCancelable(false)
-            .setPositiveButton("Confirmar") { _, _ ->
-                val categoria = spinner.selectedItem.toString()
-                // Correção: Primeiro removemos os pontos de milhar, depois trocamos a vírgula decimal por ponto
-                val valorTexto = inputValor.text.toString().replace(".", "").replace(",", ".")
-                val valor = valorTexto.toDoubleOrNull() ?: 0.0
-                
-                listaDadosDespesas.add(Despesa(path, categoria, valor))
-                listaFotosDespesas.add(path)
-                
-                btnFotoDespesa.apply {
-                    // text = String.format(Locale.forLanguageTag("pt-BR"), "✅ RECIBO ADICIONADO (%d)", listaFotosDespesas.size)
-                    alpha = 1.0f
-                    backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#9C27B0"))
-                }
-                salvarEstado()
-                validarBotoes()
-                Toast.makeText(this, "Despesa salva: R$ $valor", Toast.LENGTH_SHORT).show()
+        btnConfirmar.setOnClickListener {
+            val categoria = spinner.selectedItem.toString()
+            val valorTexto = inputValor.text.toString().replace(".", "").replace(",", ".")
+            val valor = valorTexto.toDoubleOrNull() ?: 0.0
+            
+            listaDadosDespesas.add(Despesa(path, categoria, valor))
+            listaFotosDespesas.add(path)
+            
+            btnFotoDespesa.apply {
+                alpha = 1.0f
+                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#9C27B0"))
             }
-            .setNegativeButton("Cancelar") { _, _ -> 
-                File(path).delete() // Remove a foto se cancelar
-            }
-            .show()
+            
+            salvarEstado()
+            validarBotoes()
+            atualizarDashboard()
+            dialog.dismiss()
+            Toast.makeText(this, "Despesa salva: R$ $valor", Toast.LENGTH_SHORT).show()
+        }
+
+        btnCancelar.setOnClickListener {
+            File(path).delete()
+            dialog.dismiss()
+        }
+
+        dialog.setCancelable(false)
+        dialog.show()
     }
 
     private val cropImage = registerForActivityResult(CropImageContract()) { result ->
@@ -371,6 +367,10 @@ class MainActivity : AppCompatActivity() {
         txtViagensCount = findViewById(R.id.txtViagensCount)
         mainScrollView = findViewById(R.id.mainScrollView)
         
+        txtDashKmTotal = findViewById(R.id.txtDashKmTotal)
+        txtDashCustoTotal = findViewById(R.id.txtDashCustoTotal)
+        txtDashRecibosTotal = findViewById(R.id.txtDashRecibosTotal)
+        
         btnGpsOrigem = findViewById(R.id.btnGpsOrigem)
         btnGpsDestino = findViewById(R.id.btnGpsDestino)
 
@@ -455,18 +455,64 @@ class MainActivity : AppCompatActivity() {
                 .get()
                 .addOnSuccessListener { document ->
                     if (document != null && document.exists()) {
+                        // Dentro do addOnSuccessListener do db.collection("tecnicos")...
                         val nomeTecnico = document.getString("nome") ?: "Usuário"
                         editCondutor.setText(nomeTecnico)
                         txtOlaUsuario.text = "Olá, $nomeTecnico"
+
+// NOVO: Verifica se mudou de usuário e limpa os dados se sim
+                        val condutorSalvo = prefs.getString("rascunho_condutor", "")
+                        if (!condutorSalvo.isNullOrEmpty() && condutorSalvo != nomeTecnico) {
+                            // Usuário diferente — limpa tudo
+                            listaDeViagens.clear()
+                            listaFotosDespesas.clear()
+                            listaDadosDespesas.clear()
+                            fotoIdaPath = null
+                            fotoVoltaPath = null
+                            fotoIdaHora = null
+                            fotoVoltaHora = null
+                            prefs.edit()
+                                .remove("lista_viagens")
+                                .remove("listaFotosDespesas")
+                                .remove("listaDadosDespesas")
+                                .remove("fotoIdaPath")
+                                .remove("fotoVoltaPath")
+                                .apply()
+                            atualizarListaVisual()
+                            validarBotoes()
+                        }
+
                         prefs.edit().putString("rascunho_condutor", nomeTecnico).apply()
                     } else {
                         // Se não achar em 'tecnicos', tenta em 'usuarios' (legado)
                         db.collection("usuarios").document(currentUser.uid).get()
                             .addOnSuccessListener { doc ->
-                                if (doc != null && doc.exists()) {
+                        if (doc != null && doc.exists()) {
                                     val nomeLegacy = doc.getString("nome") ?: "Usuário"
                                     editCondutor.setText(nomeLegacy)
                                     txtOlaUsuario.text = "Olá, $nomeLegacy"
+
+                                    // Limpeza para usuário legado também
+                                    val condutorSalvo = prefs.getString("rascunho_condutor", "")
+                                    if (!condutorSalvo.isNullOrEmpty() && condutorSalvo != nomeLegacy) {
+                                        listaDeViagens.clear()
+                                        listaFotosDespesas.clear()
+                                        listaDadosDespesas.clear()
+                                        fotoIdaPath = null
+                                        fotoVoltaPath = null
+                                        fotoIdaHora = null
+                                        fotoVoltaHora = null
+                                        prefs.edit()
+                                            .remove("lista_viagens")
+                                            .remove("listaFotosDespesas")
+                                            .remove("listaDadosDespesas")
+                                            .remove("fotoIdaPath")
+                                            .remove("fotoVoltaPath")
+                                            .apply()
+                                        atualizarListaVisual()
+                                        validarBotoes()
+                                    }
+
                                     prefs.edit().putString("rascunho_condutor", nomeLegacy).apply()
                                 } else {
                                     txtOlaUsuario.text = "Olá (Nome não encontrado)"
@@ -856,6 +902,7 @@ class MainActivity : AppCompatActivity() {
                     
                     salvarEstado()
                     atualizarListaVisual()
+                    atualizarDashboard()
                     validarBotoes()
                     Toast.makeText(this, "Tudo limpo!", Toast.LENGTH_SHORT).show()
                 }
@@ -864,6 +911,7 @@ class MainActivity : AppCompatActivity() {
         }
         
         validarBotoes() // Chama no início
+        atualizarDashboard()
     }
 
     private fun verificarBloqueio() {
@@ -1016,6 +1064,26 @@ class MainActivity : AppCompatActivity() {
             
             containerViagens.addView(view)
         }
+        atualizarDashboard()
+    }
+
+    private fun atualizarDashboard() {
+        var totalKm = 0
+        var totalCusto = 0.0
+        
+        listaDeViagens.forEach { v ->
+            totalKm += (v.kmFin - v.kmIni)
+            totalCusto += v.custo
+        }
+        
+        // Adiciona despesas de alimentação ao custo total
+        listaDadosDespesas.forEach { d ->
+            totalCusto += d.valor
+        }
+        
+        txtDashKmTotal.text = totalKm.toString()
+        txtDashCustoTotal.text = String.format(Locale.forLanguageTag("pt-BR"), "R$ %.2f", totalCusto)
+        txtDashRecibosTotal.text = listaFotosDespesas.size.toString()
     }
 
     private fun salvarEstado() {
@@ -1160,6 +1228,29 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 "Sair da Conta" -> {
+                    // Limpeza radical antes de sair
+                    listaDeViagens.clear()
+                    listaFotosDespesas.clear()
+                    listaDadosDespesas.clear()
+                    fotoIdaPath = null
+                    fotoVoltaPath = null
+                    fotoIdaHora = null
+                    fotoVoltaHora = null
+                    
+                    val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+                    prefs.edit()
+                        .remove("lista_viagens")
+                        .remove("listaFotosDespesas")
+                        .remove("listaDadosDespesas")
+                        .remove("fotoIdaPath")
+                        .remove("fotoVoltaPath")
+                        .remove("rascunho_data")
+                        .remove("rascunho_origem")
+                        .remove("rascunho_destino")
+                        .remove("rascunho_kmIni")
+                        .remove("rascunho_obs")
+                        .apply()
+
                     auth.signOut()
                     startActivity(Intent(this, LoginActivity::class.java))
                     finish()
@@ -1322,24 +1413,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun mostrarDialogoSelecaoImagem(isIda: Boolean) {
-        val options = arrayOf("Tirar Foto", "Escolher da Galeria")
-        val builder = AlertDialog.Builder(this)
-        builder.setTitle("Selecione a Prova de KM")
-        builder.setItems(options) { _, which ->
-            when (which) {
-                0 -> {
-                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                        pedindoFotoIda = isIda
-                        requestCameraPermission.launch(Manifest.permission.CAMERA)
-                    } else {
-                        iniciarCapturaComRecorte(isIda, true)
-                    }
-                }
-                1 -> iniciarCapturaComRecorte(isIda, false)
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.layout_bottom_sheet_km, null)
+        dialog.setContentView(view)
+
+        view.findViewById<View>(R.id.btnBsCamera).setOnClickListener {
+            dialog.dismiss()
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                pedindoFotoIda = isIda
+                requestCameraPermission.launch(Manifest.permission.CAMERA)
+            } else {
+                iniciarCapturaComRecorte(isIda, true)
             }
         }
-        builder.setNegativeButton("Cancelar", null)
-        builder.show()
+
+        view.findViewById<View>(R.id.btnBsGaleria).setOnClickListener {
+            dialog.dismiss()
+            iniciarCapturaComRecorte(isIda, false)
+        }
+
+        view.findViewById<View>(R.id.btnBsCancelar).setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 
     private fun saveImageFromUri(uri: Uri, prefix: String): String? {

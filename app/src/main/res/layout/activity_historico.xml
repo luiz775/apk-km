@@ -29,15 +29,6 @@
             android:orientation="horizontal">
 
             <ImageButton
-                android:id="@+id/btnRefresh"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/stat_notify_sync"
-                android:tint="#FFFFFF"
-                android:contentDescription="Atualizar" />
-
-            <ImageButton
                 android:id="@+id/btnFiltro"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
@@ -45,6 +36,15 @@
                 android:src="@android:drawable/ic_menu_sort_by_size"
                 android:tint="#FFFFFF"
                 android:contentDescription="Filtrar" />
+
+            <ImageButton
+                android:id="@+id/btnApagarTudo"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_delete"
+                android:tint="#FF5252"
+                android:contentDescription="Apagar Tudo" />
         </LinearLayout>
     </RelativeLayout>
 

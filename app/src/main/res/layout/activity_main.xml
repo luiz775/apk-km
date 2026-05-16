@@ -74,6 +74,101 @@
                 app:tint="@color/text_main" />
         </RelativeLayout>
 
+        <!-- DASHBOARD CARDS -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="28dp">
+
+            <!-- KM CARD -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/bg_button_modern"
+                android:padding="12dp"
+                android:layout_marginEnd="6dp"
+                android:gravity="center">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🛣️ Total KM"
+                    android:textColor="@color/accent_blue"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:alpha="0.8"/>
+                <TextView
+                    android:id="@+id/txtDashKmTotal"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textColor="#FFFFFF"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="2dp"/>
+            </LinearLayout>
+
+            <!-- CUSTO CARD -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/bg_button_modern"
+                android:padding="12dp"
+                android:layout_marginHorizontal="3dp"
+                android:gravity="center">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="💰 Custo Total"
+                    android:textColor="@color/accent_green"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:alpha="0.8"/>
+                <TextView
+                    android:id="@+id/txtDashCustoTotal"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="R$ 0,00"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="2dp"/>
+            </LinearLayout>
+
+            <!-- RECIBOS CARD -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/bg_button_modern"
+                android:padding="12dp"
+                android:layout_marginStart="6dp"
+                android:gravity="center">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📄 Recibos"
+                    android:textColor="@color/accent_gold"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:alpha="0.8"/>
+                <TextView
+                    android:id="@+id/txtDashRecibosTotal"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textColor="#FFFFFF"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="2dp"/>
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- FOTOS SECTION -->
         <TextView
             android:layout_width="wrap_content"

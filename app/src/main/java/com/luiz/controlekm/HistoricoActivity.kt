@@ -33,15 +33,14 @@ class HistoricoActivity : AppCompatActivity() {
         txtFiltroAtivo = findViewById(R.id.txtFiltroAtivo)
         val btnVoltar = findViewById<Button>(R.id.btnVoltarHistorico)
         val btnFiltro = findViewById<ImageButton>(R.id.btnFiltro)
-        val btnRefresh = findViewById<ImageButton>(R.id.btnRefresh)
+        val btnApagarTudo = findViewById<ImageButton>(R.id.btnApagarTudo)
 
         btnVoltar.setOnClickListener { finish() }
         
         btnFiltro.setOnClickListener { mostrarMenuFiltro(it) }
 
-        btnRefresh.setOnClickListener {
-            txtFiltroAtivo.visibility = View.GONE
-            carregarDadosDaNuvem()
+        btnApagarTudo.setOnClickListener {
+            apagarTodoHistorico()
         }
 
         // 1. CARREGAR HISTÓRICO LOCAL IMEDIATAMENTE
@@ -88,6 +87,51 @@ class HistoricoActivity : AppCompatActivity() {
                     Toast.makeText(this, "Erro ao atualizar: Verifique sua conexão.", Toast.LENGTH_SHORT).show()
                 }
         }
+    }
+
+    private fun apagarTodoHistorico() {
+        AlertDialog.Builder(this)
+            .setTitle("Apagar Todo o Histórico?")
+            .setMessage("Isso removerá o histórico local e também os registros salvos na nuvem. Deseja continuar?")
+            .setPositiveButton("Sim, Apagar Tudo") { _, _ ->
+                val currentUser = auth.currentUser
+                if (currentUser == null) return@setPositiveButton
+
+                progressHistorico.visibility = View.VISIBLE
+                
+                // 1. Limpa Local
+                val prefs = getSharedPreferences("DadosApp", MODE_PRIVATE)
+                val historicoKey = "historico_local_${currentUser.uid}"
+                prefs.edit().remove(historicoKey).apply()
+
+                // 2. Limpa Nuvem (Firestore)
+                db.collection("viagens")
+                    .whereEqualTo("tecnicoId", currentUser.uid)
+                    .get()
+                    .addOnSuccessListener { documents ->
+                        val batch = db.batch()
+                        for (doc in documents) {
+                            batch.delete(doc.reference)
+                        }
+                        
+                        batch.commit().addOnCompleteListener { task ->
+                            progressHistorico.visibility = View.GONE
+                            if (task.isSuccessful) {
+                                fullListaViagens.clear()
+                                exibirViagens(fullListaViagens)
+                                Toast.makeText(this, "Histórico limpo (Celular e Nuvem)!", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(this, "Erro ao limpar nuvem, mas local foi apagado.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    .addOnFailureListener {
+                        progressHistorico.visibility = View.GONE
+                        Toast.makeText(this, "Erro ao acessar a nuvem para apagar.", Toast.LENGTH_SHORT).show()
+                    }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun carregarDadosLocais() {
@@ -172,17 +216,17 @@ class HistoricoActivity : AppCompatActivity() {
 
     private fun mostrarMenuFiltro(view: View) {
         val popup = PopupMenu(this, view)
-        popup.menu.add("Todas as Viagens")
+        popup.menu.add("Atualizar lista")
         popup.menu.add("Viagens de Hoje")
+        popup.menu.add("Viagens da semana")
         popup.menu.add("Maior Custo (R$)")
-        popup.menu.add("Maior Quilometragem")
         popup.menu.add("Limpar Filtros")
 
         popup.setOnMenuItemClickListener { item ->
             when (item.title) {
-                "Todas as Viagens" -> {
+                "Atualizar lista" -> {
                     txtFiltroAtivo.visibility = View.GONE
-                    ordenarEPresentar(fullListaViagens)
+                    carregarDadosDaNuvem()
                 }
                 "Viagens de Hoje" -> {
                     val hoje = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
@@ -191,15 +235,26 @@ class HistoricoActivity : AppCompatActivity() {
                     txtFiltroAtivo.visibility = View.VISIBLE
                     exibirViagens(filtrada)
                 }
+                "Viagens da semana" -> {
+                    val cal = Calendar.getInstance()
+                    cal.add(Calendar.DAY_OF_YEAR, -7)
+                    val seteDiasAtras = cal.time
+                    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                    
+                    val filtrada = fullListaViagens.filter { 
+                        try {
+                            val dataViagem = sdf.parse(it.data)
+                            dataViagem != null && dataViagem.after(seteDiasAtras)
+                        } catch (e: Exception) { false }
+                    }
+                    
+                    txtFiltroAtivo.text = "Filtro: Últimos 7 dias"
+                    txtFiltroAtivo.visibility = View.VISIBLE
+                    exibirViagens(filtrada)
+                }
                 "Maior Custo (R$)" -> {
                     val ordenada = fullListaViagens.sortedByDescending { it.custo }
                     txtFiltroAtivo.text = "Filtro: Maior Custo"
-                    txtFiltroAtivo.visibility = View.VISIBLE
-                    exibirViagens(ordenada)
-                }
-                "Maior Quilometragem" -> {
-                    val ordenada = fullListaViagens.sortedByDescending { it.kmFin - it.kmIni }
-                    txtFiltroAtivo.text = "Filtro: Maior Quilometragem"
                     txtFiltroAtivo.visibility = View.VISIBLE
                     exibirViagens(ordenada)
                 }

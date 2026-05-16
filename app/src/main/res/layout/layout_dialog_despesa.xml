@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_card_modern"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:paddingBottom="32dp">
+
+    <View
+        android:layout_width="36dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:background="#33FFFFFF"
+        android:layout_marginBottom="20dp"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="DADOS DA DESPESA"
+        android:textColor="#80FFFFFF"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.1"
+        android:layout_marginBottom="24dp"/>
+
+    <!-- CATEGORIA -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Selecione a Categoria"
+        android:textColor="@color/text_muted"
+        android:textSize="11sp"
+        android:layout_marginBottom="8dp"/>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@drawable/bg_button_modern"
+        android:paddingHorizontal="12dp"
+        android:layout_marginBottom="20dp">
+        <Spinner
+            android:id="@+id/spinnerCategoria"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:backgroundTint="@color/text_main" />
+    </FrameLayout>
+
+    <!-- VALOR -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Valor do Recibo (R$)"
+        android:textColor="@color/text_muted"
+        android:textSize="11sp"
+        android:layout_marginBottom="8dp"/>
+
+    <EditText
+        android:id="@+id/inputValorDespesa"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="@drawable/bg_button_modern"
+        android:hint="0,00"
+        android:inputType="numberDecimal"
+        android:paddingHorizontal="20dp"
+        android:textColor="#FFFFFF"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColorHint="#33FFFFFF"
+        android:layout_marginBottom="32dp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnCancelarDespesa"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:text="DESCARTAR"
+            android:backgroundTint="@android:color/transparent"
+            android:textColor="#EF4444"
+            app:strokeColor="#33EF4444"
+            app:strokeWidth="1dp"
+            android:layout_marginEnd="8dp"
+            app:cornerRadius="14dp"/>
+
+        <Button
+            android:id="@+id/btnConfirmarDespesa"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1.5"
+            android:text="SALVAR DESPESA"
+            android:backgroundTint="#9C27B0"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            app:cornerRadius="14dp"/>
+    </LinearLayout>
+</LinearLayout>
