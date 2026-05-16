@@ -8,26 +8,32 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.*
 import android.graphics.pdf.PdfDocument
+import android.location.Geocoder
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
-import android.provider.MediaStore
 import android.provider.Settings
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
 import android.text.method.DigitsKeyListener
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.content.edit
+import androidx.core.graphics.scale
+import androidx.core.graphics.toColorInt
 import com.canhub.cropper.CropImageContract
 import com.canhub.cropper.CropImageContractOptions
 import com.canhub.cropper.CropImageOptions
 import com.canhub.cropper.CropImageView
+import com.google.android.gms.location.LocationServices
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ktx.firestore
@@ -105,14 +111,20 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnAdicionar: Button
     private lateinit var btnGerarPdf: Button
     private lateinit var btnCompartilhar: Button
-    private lateinit var btnFotoIda: Button
-    private lateinit var btnFotoVolta: Button
-    private lateinit var btnFotoDespesa: Button
+    private lateinit var btnFotoIda: View
+    private lateinit var btnFotoVolta: View
+    private lateinit var btnFotoDespesa: View
     private lateinit var btnReset: Button
     private lateinit var btnConfiguracoes: ImageButton
     private lateinit var radioGroupVeiculo: RadioGroup
     private lateinit var containerViagens: LinearLayout
     private lateinit var txtOlaUsuario: TextView
+    private lateinit var txtViagensCount: TextView
+    private lateinit var mainScrollView: ScrollView
+    
+    private lateinit var btnGpsOrigem: ImageButton
+    private lateinit var btnGpsDestino: ImageButton
+    private val fusedLocationClient by lazy { LocationServices.getFusedLocationProviderClient(this) }
 
     private val scannerOptions = GmsDocumentScannerOptions.Builder()
         .setResultFormats(RESULT_FORMAT_JPEG)
@@ -255,7 +267,8 @@ class MainActivity : AppCompatActivity() {
                 listaFotosDespesas.add(path)
                 
                 btnFotoDespesa.apply {
-                    text = "✅ RECIBO ADICIONADO (${listaFotosDespesas.size})"
+                    // text = String.format(Locale.forLanguageTag("pt-BR"), "✅ RECIBO ADICIONADO (%d)", listaFotosDespesas.size)
+                    alpha = 1.0f
                     backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#9C27B0"))
                 }
                 salvarEstado()
@@ -281,16 +294,18 @@ class MainActivity : AppCompatActivity() {
                     fotoIdaPath = path
                     fotoIdaHora = horaAtual
                     btnFotoIda.apply {
-                        text = "✅ FOTO IDA"
-                        backgroundTintList = android.content.res.ColorStateList.valueOf(Color.GREEN)
+                        // text = "✅ FOTO IDA" // Removido pois agora é um ViewGroup
+                        alpha = 1.0f
+                        backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FF5722"))
                     }
                     btnFotoVolta.isEnabled = true
                 } else {
                     fotoVoltaPath = path
                     fotoVoltaHora = horaAtual
                     btnFotoVolta.apply {
-                        text = "✅ FOTO VOLTA"
-                        backgroundTintList = android.content.res.ColorStateList.valueOf(Color.GREEN)
+                        // text = "✅ FOTO VOLTA" // Removido pois agora é um ViewGroup
+                        alpha = 1.0f
+                        backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#3D7FFF"))
                     }
                 }
                 salvarEstado()
@@ -305,6 +320,16 @@ class MainActivity : AppCompatActivity() {
     private val requestCameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         if (isGranted) iniciarCapturaComRecorte(pedindoFotoIda, true)
         else Toast.makeText(this, "Permissão de Câmera necessária para as fotos de KM!", Toast.LENGTH_LONG).show()
+    }
+
+    private val requestLocationPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        if (fineGranted || coarseGranted) {
+            Toast.makeText(this, "Localização liberada! Clique no botão novamente.", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Permissão de Localização necessária para preencher a cidade!", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -343,6 +368,41 @@ class MainActivity : AppCompatActivity() {
         radioGroupVeiculo = findViewById(R.id.radioGroupVeiculo)
         containerViagens = findViewById(R.id.containerViagens)
         txtOlaUsuario = findViewById(R.id.txtOlaUsuario)
+        txtViagensCount = findViewById(R.id.txtViagensCount)
+        mainScrollView = findViewById(R.id.mainScrollView)
+        
+        btnGpsOrigem = findViewById(R.id.btnGpsOrigem)
+        btnGpsDestino = findViewById(R.id.btnGpsDestino)
+
+        // --- MELHORIA DE PRECISÃO (TOQUE AMPLO) ---
+        fun scrollToView(view: View) {
+            mainScrollView.postDelayed({
+                val rect = Rect()
+                view.getDrawingRect(rect)
+                mainScrollView.offsetDescendantRectToMyCoords(view, rect)
+                mainScrollView.smoothScrollTo(0, rect.top - 100)
+            }, 300)
+        }
+
+        fun setupRowFocus(rowId: Int, target: View) {
+            val row = findViewById<View>(rowId)
+            row.setOnClickListener {
+                target.requestFocus()
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showSoftInput(target, InputMethodManager.SHOW_IMPLICIT)
+                scrollToView(row)
+            }
+        }
+        
+        setupRowFocus(R.id.row_data, editData)
+        setupRowFocus(R.id.row_condutor, editCondutor)
+        setupRowFocus(R.id.row_hSaida, editHoraSaida)
+        setupRowFocus(R.id.row_hChegada, editHoraChegada)
+        setupRowFocus(R.id.row_kmIni, editKmInicial)
+        setupRowFocus(R.id.row_kmFin, editKmFinal)
+        setupRowFocus(R.id.row_origem, editOrigem)
+        setupRowFocus(R.id.row_destino, editDestino)
+        setupRowFocus(R.id.row_obs, editObservacoes)
 
         // --- PERSISTÊNCIA E HISTÓRICO ---
         val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
@@ -366,9 +426,13 @@ class MainActivity : AppCompatActivity() {
         listOf(editOrigem, editDestino).forEach { view ->
             view.setOnClickListener {
                 if (view.text.isEmpty()) view.showDropDown()
+                scrollToView(view)
             }
             view.setOnFocusChangeListener { _, hasFocus ->
-                if (hasFocus && view.text.isEmpty()) view.showDropDown()
+                if (hasFocus) {
+                    if (view.text.isEmpty()) view.showDropDown()
+                    scrollToView(view)
+                }
             }
         }
 
@@ -451,21 +515,30 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (listaFotosDespesas.isNotEmpty()) {
-            btnFotoDespesa.text = "✅ RECIBO ADICIONADO (${listaFotosDespesas.size})"
+            btnFotoDespesa.apply {
+                alpha = 1.0f
+                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#9C27B0"))
+            }
+        } else {
+            btnFotoDespesa.alpha = 0.5f
         }
         
         if (fotoIdaPath != null) {
             btnFotoIda.apply {
-                text = "✅ FOTO IDA"
-                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.GREEN)
+                alpha = 1.0f
+                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FF5722"))
             }
             btnFotoVolta.isEnabled = true
+        } else {
+            btnFotoIda.alpha = 0.5f
         }
         if (fotoVoltaPath != null) {
             btnFotoVolta.apply {
-                text = "✅ FOTO VOLTA"
-                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.GREEN)
+                alpha = 1.0f
+                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#3D7FFF"))
             }
+        } else {
+            btnFotoVolta.alpha = 0.5f
         }
 
         val jsonViagens = prefs.getString("lista_viagens", null)
@@ -488,23 +561,32 @@ class MainActivity : AppCompatActivity() {
         }
 
         editHoraSaida.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus && editHoraSaida.text.isEmpty()) {
-                editHoraSaida.setText(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()))
-                salvarEstado()
+            if (hasFocus) {
+                if (editHoraSaida.text.isEmpty()) {
+                    editHoraSaida.setText(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()))
+                    salvarEstado()
+                }
+                scrollToView(editHoraSaida)
             }
         }
 
         editHoraChegada.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus && editHoraChegada.text.isEmpty()) {
-                editHoraChegada.setText(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()))
-                salvarEstado()
+            if (hasFocus) {
+                if (editHoraChegada.text.isEmpty()) {
+                    editHoraChegada.setText(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()))
+                    salvarEstado()
+                }
+                scrollToView(editHoraChegada)
             }
         }
 
         editData.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus && editData.text.isEmpty()) {
-                editData.setText(SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()))
-                salvarEstado()
+            if (hasFocus) {
+                if (editData.text.isEmpty()) {
+                    editData.setText(SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()))
+                    salvarEstado()
+                }
+                scrollToView(editData)
             }
         }
 
@@ -565,6 +647,18 @@ class MainActivity : AppCompatActivity() {
         editCondutor.addTextChangedListener(watcherBotoes)
         editOrigem.addTextChangedListener(watcherBotoes)
         editDestino.addTextChangedListener(watcherBotoes)
+
+        // Ajuste de scroll automático ao focar nos campos restantes
+        listOf(editKmInicial, editKmFinal, editCondutor, editObservacoes).forEach { view ->
+            val existing = view.onFocusChangeListener
+            view.setOnFocusChangeListener { v, hasFocus ->
+                existing?.onFocusChange(v, hasFocus)
+                if (hasFocus) scrollToView(v)
+            }
+        }
+
+        btnGpsOrigem.setOnClickListener { preencherCidadeComGps(editOrigem) }
+        btnGpsDestino.setOnClickListener { preencherCidadeComGps(editDestino) }
 
         btnFotoIda.setOnClickListener { 
             pedindoFotoIda = true
@@ -744,16 +838,19 @@ class MainActivity : AppCompatActivity() {
                     findViewById<RadioButton>(R.id.radioParticular).isChecked = true
                     
                     btnFotoIda.apply {
-                        text = "📸 FOTO IDA"
+                        // text = "📸 FOTO IDA"
+                        alpha = 0.5f
                         backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FF5722"))
                     }
                     btnFotoVolta.apply {
-                        text = "📸 FOTO VOLTA"
+                        // text = "📸 FOTO VOLTA"
+                        alpha = 0.5f
                         backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#607D8B"))
                         isEnabled = false
                     }
                     btnFotoDespesa.apply {
-                        text = "📸 ADICIONAR DESPESAS (RECIBOS)"
+                        // text = "📸 ADICIONAR DESPESAS (RECIBOS)"
+                        alpha = 0.5f
                         isEnabled = false
                     }
                     
@@ -848,19 +945,55 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun preencherCidadeComGps(target: AutoCompleteTextView) {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            
+            requestLocationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            return
+        }
+
+        Toast.makeText(this, "Buscando localização...", Toast.LENGTH_SHORT).show()
+        
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) {
+                try {
+                    val geocoder = Geocoder(this, Locale.getDefault())
+                    val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+                    if (!addresses.isNullOrEmpty()) {
+                        val cidade = addresses[0].locality ?: addresses[0].subAdminArea ?: "Desconhecida"
+                        target.setText(cidade)
+                        salvarEstado()
+                    } else {
+                        Toast.makeText(this, "Não foi possível encontrar a cidade.", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    Toast.makeText(this, "Erro ao obter cidade: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                Toast.makeText(this, "Ative o GPS do seu aparelho!", Toast.LENGTH_LONG).show()
+            }
+        }.addOnFailureListener { e ->
+            Toast.makeText(this, "Falha no GPS: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun atualizarListaVisual() {
         containerViagens.removeAllViews()
+        txtViagensCount.text = String.format(Locale.forLanguageTag("pt-BR"), "%d registros", listaDeViagens.size)
         
         listaDeViagens.forEachIndexed { index, viagem ->
             val view = layoutInflater.inflate(android.R.layout.simple_list_item_2, containerViagens, false)
             val text1 = view.findViewById<TextView>(android.R.id.text1)
             val text2 = view.findViewById<TextView>(android.R.id.text2)
             
-            text1.text = "${viagem.origem} > ${viagem.destino} (${viagem.data})"
+            text1.text = String.format(Locale.forLanguageTag("pt-BR"), "%s > %s (%s)", viagem.origem, viagem.destino, viagem.data)
             text1.setTextColor(Color.WHITE)
             
             val kmTotal = viagem.kmFin - viagem.kmIni
-            text2.text = "Condutor: ${viagem.condutor} | KM: $kmTotal (I: ${viagem.kmIni} F: ${viagem.kmFin}) | R$ ${String.format("%.2f", viagem.custo)}"
+            text2.text = String.format(Locale.forLanguageTag("pt-BR"), "Condutor: %s | KM: %d (I: %d F: %d) | R$ %.2f", 
+                viagem.condutor, kmTotal, viagem.kmIni, viagem.kmFin, viagem.custo)
             text2.setTextColor(Color.LTGRAY)
             
             view.setPadding(0, 20, 0, 20)
@@ -987,9 +1120,17 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this, "Faça login para exportar o histórico!", Toast.LENGTH_SHORT).show()
                     } else {
                         Toast.makeText(this, "Buscando histórico na nuvem...", Toast.LENGTH_SHORT).show()
-                        db.collection("viagens")
-                            .whereEqualTo("tecnicoId", currentUser.uid)
-                            .get()
+                        
+                        val nomeUsuarioLogado = editCondutor.text.toString().trim()
+                        val isAdmin = nomeUsuarioLogado.equals("Luiz Gustavo", ignoreCase = true)
+                        
+                        val query = if (isAdmin) {
+                            db.collection("viagens") // Admin vê tudo
+                        } else {
+                            db.collection("viagens").whereEqualTo("tecnicoId", currentUser.uid)
+                        }
+
+                        query.get()
                             .addOnSuccessListener { documents ->
                                 if (documents.isEmpty) {
                                     Toast.makeText(this, "Nenhuma viagem encontrada no histórico.", Toast.LENGTH_SHORT).show()
@@ -1092,8 +1233,11 @@ class MainActivity : AppCompatActivity() {
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0")
 
-                // Geramos um ID único baseado no horário da primeira viagem da lista
-                val loteId = if (viagens.isNotEmpty()) viagens[0].hSaida.replace(":", "") else "0000"
+                // Geramos um ID único baseado no UID do técnico e timestamp para evitar sobreposição
+                val loteId = if (viagens.isNotEmpty()) {
+                    val condutor = viagens[0].condutor.take(4).uppercase().replace(" ", "")
+                    "${condutor}_${System.currentTimeMillis()}"
+                } else System.currentTimeMillis().toString()
 
                 val jsonEnvio = JSONObject()
                 jsonEnvio.put("loteId", loteId)
@@ -1132,12 +1276,19 @@ class MainActivity : AppCompatActivity() {
 
                 // O Google Apps Script exige que leiamos a resposta para processar
                 val responseCode = conn.responseCode
-                if (responseCode in 200..399) {
-                    val inputContent = conn.inputStream.bufferedReader().use { it.readText() }
-                    println("Google Success: $inputContent")
+                val inputContent = if (responseCode in 200..399) {
+                    conn.inputStream.bufferedReader().use { it.readText() }
                 } else {
-                    val errorContent = conn.errorStream?.bufferedReader()?.use { it.readText() }
-                    println("Google Error: $errorContent")
+                    conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "Sem resposta"
+                }
+
+                runOnUiThread {
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Resposta do Script")
+                        .setMessage(inputContent)
+                        .setPositiveButton("OK", null)
+                        .show()
+
                 }
                 conn.disconnect()
             } catch (e: Exception) {
@@ -1260,106 +1411,123 @@ class MainActivity : AppCompatActivity() {
 
     private fun gerarRelatorioCompleto(viagens: List<Viagem>, isExportacaoHistorico: Boolean = false) {
         val document = PdfDocument()
-        
-        // --- PÁGINA 1: DADOS (MODO RETRATO 595x842) ---
-        val pageInfo1 = PdfDocument.PageInfo.Builder(595, 842, 1).create()
-        val page1 = document.startPage(pageInfo1)
-        val canvas1 = page1.canvas
         val paint = Paint()
+        val isParticular = findViewById<RadioButton>(R.id.radioParticular).isChecked
 
+        // Variáveis de controle para múltiplas páginas
+        var currentPageNumber = 1
+        var pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
+        var page = document.startPage(pageInfo)
+        var canvas = page.canvas
+
+        // Função interna para desenhar o cabeçalho das colunas de forma limpa
+        fun drawTableHeaders(canv: Canvas, y: Float) {
+            paint.isFakeBoldText = true
+            paint.textSize = 7.5f 
+            paint.textAlign = Paint.Align.CENTER
+            paint.color = Color.BLACK
+            
+            // Fundo cinza claro para o cabeçalho para destacar
+            val bgPaint = Paint().apply { color = Color.LTGRAY; alpha = 30 }
+            canv.drawRect(20f, y - 10f, 575f, y + 5f, bgPaint)
+
+            canv.drawText("DATA", 35f, y, paint)
+            canv.drawText("CONDUTOR", 75f, y, paint)
+            canv.drawText("ORIGEM", 125f, y, paint)
+            canv.drawText("DESTINO", 185f, y, paint)
+            canv.drawText("OBS.", 255f, y, paint)
+            canv.drawText("SAÍDA", 340f, y, paint)
+            canv.drawText("CHEG.", 380f, y, paint)
+            canv.drawText("KMI", 415f, y, paint)
+            canv.drawText("KMF", 450f, y, paint)
+            canv.drawText("URB.", 485f, y, paint)
+            canv.drawText("TOTAL", 520f, y, paint)
+            
+            if (isParticular) {
+                canv.drawText("CUSTO", 560f, y, paint)
+            }
+            canv.drawLine(20f, y + 8f, 575f, y + 8f, paint)
+        }
+
+        // --- PÁGINA 1: Título e Fotos ---
         paint.isFakeBoldText = true
         paint.textSize = 16f
         paint.textAlign = Paint.Align.CENTER
+        paint.color = Color.BLACK
+        val tituloRelatorio = if (isExportacaoHistorico) "HISTÓRICO GERAL DE VIAGENS" else "RELATÓRIO GERAL DE VIAGENS"
+        canvas.drawText(tituloRelatorio, 297f, 50f, paint)
         
-        val titulo = if (isExportacaoHistorico) "HISTÓRICO GERAL DE VIAGENS" else "RELATÓRIO GERAL DE VIAGENS"
-        canvas1.drawText(titulo, 297f, 50f, paint)
+        var yPos = 80f // Início das fotos
 
-        // --- SEÇÃO DE FOTOS (NO TOPO AGORA) ---
-        val yFotos = 110f
-
-        fun desenharFotoFinal(path: String?, x: Float, y: Float, label: String, hora: String?) {
-            if (isExportacaoHistorico) return // Não desenha fotos do dia no histórico geral
-            path?.let {
-                val options = BitmapFactory.Options().apply {
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
-                }
-                val bitmap = BitmapFactory.decodeFile(it, options) ?: return@let
-                
-                // Desenha a hora da foto acima da imagem
-                hora?.let { h ->
-                    paint.textSize = 10f
+        if (!isExportacaoHistorico) {
+            fun desenharFotoFinal(path: String?, x: Float, y: Float, label: String, hora: String?) {
+                path?.let {
+                    val bitmap = BitmapFactory.decodeFile(it) ?: return@let
+                    
+                    // Hora da foto
+                    paint.textSize = 9f
                     paint.textAlign = Paint.Align.LEFT
                     paint.isFakeBoldText = false
-                    canvas1.drawText("Hora: $h", x, y - 6f, paint)
+                    canvas.drawText("Hora: ${hora ?: "--:--"}", x, y + 10f, paint)
+                    
+                    val drawWidth = 220f
+                    val drawHeight = 73f 
+                    canvas.drawBitmap(bitmap, null, RectF(x, y + 15f, x + drawWidth, y + 15f + drawHeight), Paint(Paint.FILTER_BITMAP_FLAG))
+                    
+                    // Legenda da foto
+                    paint.textSize = 9f
+                    paint.textAlign = Paint.Align.CENTER
+                    paint.isFakeBoldText = true
+                    canvas.drawText(label, x + (drawWidth / 2), y + drawHeight + 30f, paint)
+                    bitmap.recycle()
                 }
-
-                // Tamanho fixo padronizado e compacto para as fotos no PDF (Proporção 3:1)
-                val drawWidth = 220f
-                val drawHeight = 73f 
-                
-                val destRect = RectF(x, y, x + drawWidth, y + drawHeight)
-                
-                val paintFoto = Paint().apply { 
-                    isFilterBitmap = true
-                    isAntiAlias = true
-                    isDither = true
-                }
-                
-                canvas1.drawBitmap(bitmap, null, destRect, paintFoto)
-                
-                paint.textSize = 9f
-                paint.textAlign = Paint.Align.CENTER
-                paint.isFakeBoldText = true
-                canvas1.drawText(label, x + (drawWidth / 2), y + drawHeight + 12f, paint)
-                
-                bitmap.recycle()
             }
+
+            desenharFotoFinal(fotoIdaPath, 60f, yPos, "KM INICIAL (IDA)", fotoIdaHora)
+            desenharFotoFinal(fotoVoltaPath, 315f, yPos, "KM FINAL (VOLTA)", fotoVoltaHora)
+            yPos += 140f // Aumentado para garantir espaço para a legenda e não bater no cabeçalho
         }
 
-        // Desenha as fotos lado a lado no topo (Mais compactas)
-        desenharFotoFinal(fotoIdaPath, 60f, yFotos, "KM INICIAL (IDA)", fotoIdaHora)
-        desenharFotoFinal(fotoVoltaPath, 315f, yFotos, "KM FINAL (VOLTA)", fotoVoltaHora)
-
-        // --- TABELA DE DADOS (SUBIU PARA DIMINUIR O ESPAÇO EM BRANCO) ---
-        val isParticular = findViewById<RadioButton>(R.id.radioParticular).isChecked
-        
-        paint.textSize = 7f 
-        paint.isFakeBoldText = true
-        paint.textAlign = Paint.Align.CENTER
-        val yHeader = 230f 
-        canvas1.drawText("DATA", 30f, yHeader, paint)
-        canvas1.drawText("COND.", 65f, yHeader, paint)
-        canvas1.drawText("ORIGEM", 105f, yHeader, paint)
-        canvas1.drawText("DESTINO", 165f, yHeader, paint)
-        canvas1.drawText("OBS.", 235f, yHeader, paint)
-        canvas1.drawText("SAÍDA", 330f, yHeader, paint)
-        canvas1.drawText("CHEG.", 370f, yHeader, paint)
-        canvas1.drawText("KMI", 405f, yHeader, paint)
-        canvas1.drawText("KMF", 440f, yHeader, paint)
-        canvas1.drawText("URB.", 475f, yHeader, paint) // Nova coluna compacta
-        canvas1.drawText("TOTAL", 515f, yHeader, paint)
-        
-        if (isParticular) {
-            canvas1.drawText("CUSTO", 560f, yHeader, paint)
-        }
-
-        canvas1.drawLine(20f, yHeader + 10f, 575f, yHeader + 10f, paint)
+        // Agora desenha o cabeçalho na primeira página abaixo das fotos
+        drawTableHeaders(canvas, yPos)
+        yPos += 30f // Início da lista de viagens
 
         var kmSomaViagens = 0
         var kmSomaCidade = 0
-        var custoGeral = 0.0
+        
         paint.isFakeBoldText = false
-        var yPos = yHeader + 35f
+        paint.textSize = 7f
 
         for (index in viagens.indices) {
             val v = viagens[index]
             
+            // VERIFICAÇÃO DE NOVA PÁGINA (Antes de desenhar a linha)
+            if (yPos > 780f) {
+                document.finishPage(page)
+                currentPageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
+                page = document.startPage(pageInfo)
+                canvas = page.canvas
+                
+                // Cabeçalho de continuação
+                paint.isFakeBoldText = true
+                paint.textSize = 12f
+                paint.textAlign = Paint.Align.CENTER
+                canvas.drawText(tituloRelatorio + " (Cont.)", 297f, 40f, paint)
+                
+                yPos = 70f
+                drawTableHeaders(canvas, yPos)
+                yPos += 30f
+                
+                paint.isFakeBoldText = false
+                paint.textSize = 7f
+            }
+
             val nomeAbreviado = try {
                 val partes = v.condutor.trim().split(" ")
                 if (partes.size > 1) "${partes[0]} ${partes[1].take(1)}." else partes[0]
             } catch (e: Exception) { v.condutor }
 
-            // LÓGICA DE OLHAR PARA FRENTE: O KM Urbano vai para a viagem que chegou no destino
             var kmUrbano = 0
             if (index < viagens.size - 1) {
                 val vProx = viagens[index + 1]
@@ -1368,99 +1536,113 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            canvas1.drawText(v.data, 30f, yPos, paint)
-            canvas1.drawText(nomeAbreviado.take(12), 65f, yPos, paint)
-            val offsetOrigem = desenharTextoComQuebra(canvas1, v.origem, 105f, yPos, paint, 14)
-            val offsetDestino = desenharTextoComQuebra(canvas1, v.destino, 165f, yPos, paint, 14)
-            val offsetObs = desenharTextoComQuebra(canvas1, v.observacoes, 235f, yPos, paint, 16)
+            canvas.drawText(v.data, 35f, yPos, paint)
+            canvas.drawText(nomeAbreviado.take(12), 75f, yPos, paint)
+            val offsetOrigem = desenharTextoComQuebra(canvas, v.origem, 125f, yPos, paint, 14)
+            val offsetDestino = desenharTextoComQuebra(canvas, v.destino, 185f, yPos, paint, 14)
+            val offsetObs = desenharTextoComQuebra(canvas, v.observacoes, 255f, yPos, paint, 16)
             
-            canvas1.drawText(v.hSaida, 330f, yPos, paint)
-            canvas1.drawText(v.hChegada, 370f, yPos, paint)
-            canvas1.drawText(v.kmIni.toString(), 405f, yPos, paint)
-            canvas1.drawText(v.kmFin.toString(), 440f, yPos, paint)
-            canvas1.drawText(kmUrbano.toString(), 475f, yPos, paint)
+            canvas.drawText(v.hSaida, 340f, yPos, paint)
+            canvas.drawText(v.hChegada, 380f, yPos, paint)
+            canvas.drawText(v.kmIni.toString(), 415f, yPos, paint)
+            canvas.drawText(v.kmFin.toString(), 450f, yPos, paint)
+            canvas.drawText(kmUrbano.toString(), 485f, yPos, paint)
             
             val totalViagem = (v.kmFin - v.kmIni) + kmUrbano
-            canvas1.drawText(totalViagem.toString(), 515f, yPos, paint)
+            canvas.drawText(totalViagem.toString(), 520f, yPos, paint)
             
             if (isParticular) {
                 val custoCalculado = totalViagem * 1.20
-                canvas1.drawText(String.format("%.2f", custoCalculado), 560f, yPos, paint)
+                canvas.drawText(String.format(Locale.forLanguageTag("pt-BR"), "%.2f", custoCalculado), 560f, yPos, paint)
             }
             
             kmSomaViagens += (v.kmFin - v.kmIni)
             kmSomaCidade += kmUrbano
             
             val saltoLinha = Math.max(offsetOrigem, Math.max(offsetDestino, offsetObs))
-            yPos += 30f + saltoLinha
-
-            if (yPos > 780f) break 
+            yPos += 25f + saltoLinha
         }
 
-        canvas1.drawLine(20f, yPos, 575f, yPos, paint)
+        // Rodapé de Totais
+        if (yPos > 750f) {
+            document.finishPage(page)
+            currentPageNumber++
+            pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
+            page = document.startPage(pageInfo)
+            canvas = page.canvas
+            yPos = 60f
+        }
+
+        canvas.drawLine(20f, yPos, 575f, yPos, paint)
         yPos += 25f
         paint.isFakeBoldText = true
         paint.textAlign = Paint.Align.RIGHT
         paint.textSize = 10f
         
         var kmGeral = 0
-        // Calcula o total real (último KM Final - primeiro KM Inicial) 
         if (viagens.isNotEmpty()) {
             kmGeral = viagens.last().kmFin - viagens.first().kmIni
-            custoGeral = kmGeral * 1.20
         }
+        val custoGeral = kmGeral * 1.20
 
         val resumoTotal = if (isParticular) {
-            "KM ESTRADA: $kmSomaViagens | KM CIDADE: $kmSomaCidade | TOTAL: $kmGeral KM | VALOR: R$ ${String.format("%.2f", custoGeral)}"
+            "KM ESTRADA: $kmSomaViagens | KM CIDADE: $kmSomaCidade | TOTAL: $kmGeral KM | VALOR: R$ ${String.format(Locale.forLanguageTag("pt-BR"), "%.2f", custoGeral)}"
         } else {
             "KM ESTRADA: $kmSomaViagens | KM CIDADE: $kmSomaCidade | TOTAL: $kmGeral KM"
         }
-        canvas1.drawText(resumoTotal, 570f, yPos, paint)
+        canvas.drawText(resumoTotal, 570f, yPos, paint)
 
-        // --- SEÇÃO DE COMPROVANTES DE DESPESAS (FOTOS MAIORES E MELHOR QUALIDADE) ---
-        if (listaFotosDespesas.isNotEmpty()) {
-            yPos += 70f // Aumentado de 40f para 70f para descer a seção
+        // SEÇÃO DE DESPESAS (Recibos)
+        if (listaFotosDespesas.isNotEmpty() && !isExportacaoHistorico) {
+            yPos += 50f
+            if (yPos > 600f) {
+                document.finishPage(page)
+                currentPageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
+                page = document.startPage(pageInfo)
+                canvas = page.canvas
+                yPos = 60f
+            }
+
             paint.textAlign = Paint.Align.LEFT
             paint.textSize = 10f
             paint.isFakeBoldText = true
-            canvas1.drawText("COMPROVANTES DE DESPESAS:", 40f, yPos, paint)
+            canvas.drawText("COMPROVANTES DE DESPESAS:", 40f, yPos, paint)
             
-            yPos += 15f
+            yPos += 20f
             var xPosRecibo = 40f
-            val reciboWidth = 230f // Aumentado de 120f para 230f
-            val reciboHeight = 230f // Aumentado de 120f para 230f
-            
-            val paintQualidade = Paint().apply {
-                isFilterBitmap = true
-                isAntiAlias = true
-                isDither = true
-            }
+            val reciboWidth = 230f
+            val reciboHeight = 230f
             
             for (path in listaFotosDespesas) {
+                if (yPos + reciboHeight > 800f) {
+                    document.finishPage(page)
+                    currentPageNumber++
+                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
+                    page = document.startPage(pageInfo)
+                    canvas = page.canvas
+                    yPos = 60f
+                    xPosRecibo = 40f
+                }
+
                 val bitmap = BitmapFactory.decodeFile(path) ?: continue
-                
-                val destRect = RectF(xPosRecibo, yPos, xPosRecibo + reciboWidth, yPos + reciboHeight)
-                canvas1.drawBitmap(bitmap, null, destRect, paintQualidade)
-                
+                canvas.drawBitmap(bitmap, null, RectF(xPosRecibo, yPos, xPosRecibo + reciboWidth, yPos + reciboHeight), Paint(Paint.FILTER_BITMAP_FLAG))
                 bitmap.recycle()
                 
                 xPosRecibo += reciboWidth + 20f
-                // Se chegar no fim da linha, pula para a de baixo
                 if (xPosRecibo + reciboWidth > 580f) {
                     xPosRecibo = 40f
                     yPos += reciboHeight + 20f
                 }
-                
-                // Evita desenhar fora da página
-                if (yPos + reciboHeight > 800f) break
             }
         }
 
-        paint.textSize = 8f // Reduzido de 10f para 8f
+        // Assinatura final
+        paint.textSize = 8f
         paint.isFakeBoldText = false
-        paint.textAlign = Paint.Align.RIGHT // Alinhado à direita
-        canvas1.drawText("Aplicativo criado por Luiz Gustavo", 575f, 825f, paint) // Movido para o canto inferior direito
-        document.finishPage(page1)
+        paint.textAlign = Paint.Align.RIGHT
+        canvas.drawText("Aplicativo criado por Luiz Gustavo", 575f, 825f, paint)
+        document.finishPage(page)
 
         val pasta = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
         if (!pasta.exists()) pasta.mkdirs()
@@ -1469,24 +1651,16 @@ class MainActivity : AppCompatActivity() {
 
         try {
             document.writeTo(FileOutputStream(arquivo))
-            val msgSucesso = if (isExportacaoHistorico) "Histórico Exportado com Sucesso!" else "Relatório com Fotos Gerado!"
-            Toast.makeText(this, msgSucesso, Toast.LENGTH_LONG).show()
-            
             if (!isExportacaoHistorico) {
                 listaDeViagens.clear()
-                // Limpa fotos após gerar relatório diário
                 fotoIdaPath = null
                 fotoVoltaPath = null
                 listaFotosDespesas.clear()
-                btnFotoDespesa.text = "📸 ADICIONAR DESPESAS (RECIBOS)"
             }
-            
             ultimoArquivoGerado = arquivo
             btnCompartilhar.visibility = View.VISIBLE
-            validarBotoes() // Atualiza o estado habilitado do botão
-            salvarEstado() // Salva o estado limpo ou updated
-            
-            // Abre automaticamente a janela de compartilhamento/salvamento
+            validarBotoes()
+            salvarEstado()
             compartilharArquivo(arquivo)
         } catch (e: Exception) {
             Toast.makeText(this, "Erro: ${e.message}", Toast.LENGTH_SHORT).show()

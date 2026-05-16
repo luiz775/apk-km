@@ -1,364 +1,595 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/mainScrollView"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000">
+    android:fillViewport="true"
+    android:isScrollContainer="true"
+    android:background="@drawable/bg_ambient">
 
-    <ScrollView
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fillViewport="true">
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- HEADER -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="24dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_centerInParent="true"
+                android:gravity="center">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="REGISTRO DE VIAGEM"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:textColor="#FFFFFF"
+                    android:fontFamily="sans-serif-condensed-medium"
+                    android:letterSpacing="0.15"
+                    android:shadowColor="#4DFFFFFF"
+                    android:shadowDx="0"
+                    android:shadowDy="0"
+                    android:shadowRadius="10" />
+
+                <View
+                    android:layout_width="80dp"
+                    android:layout_height="2dp"
+                    android:background="@drawable/bg_title_glow"
+                    android:layout_marginTop="4dp" />
+
+                <TextView
+                    android:id="@+id/txtOlaUsuario"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="👋 Olá, Luiz Gustavo"
+                    android:textColor="@color/accent_orange"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:alpha="0.9"
+                    android:letterSpacing="0.05"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/btnConfiguracoes"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:background="@drawable/bg_button_modern"
+                android:src="@android:drawable/ic_menu_manage"
+                android:contentDescription="Configurações"
+                app:tint="@color/text_main" />
+        </RelativeLayout>
+
+        <!-- FOTOS SECTION -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="FOTOS DA VIAGEM"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_muted"
+            android:letterSpacing="0.15"
+            android:layout_marginBottom="10dp"
+            android:layout_marginStart="4dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="20dp">
+
+            <LinearLayout
+                android:id="@+id/btnFotoIda"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="18dp"
+                android:background="@drawable/bg_button_modern"
+                android:layout_marginEnd="5dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:alpha="0.5">
+
+                <TextView
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="#26FF5C2B"
+                    android:gravity="center"
+                    android:text="📸"
+                    android:textSize="20sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="FOTO IDA"
+                    android:textColor="@color/accent_orange"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Toque para capturar"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/btnFotoVolta"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="18dp"
+                android:background="@drawable/bg_button_modern"
+                android:layout_marginStart="5dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:alpha="0.5">
+
+                <TextView
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="#263D7FFF"
+                    android:gravity="center"
+                    android:text="📷"
+                    android:textSize="20sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="FOTO VOLTA"
+                    android:textColor="@color/accent_blue"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Toque para capturar"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- SCAN BUTTON -->
+        <LinearLayout
+            android:id="@+id/btnFotoDespesa"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="16dp"
+            android:background="@drawable/bg_scan_modern"
+            android:layout_marginBottom="20dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:alpha="0.5">
+
+            <TextView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="#26A259FF"
+                android:gravity="center"
+                android:text="📄"
+                android:textSize="18sp"
+                android:layout_marginEnd="14dp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Escanear Recibo"
+                    android:textColor="#E6A259FF"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="OCR automático · Despesas"
+                    android:textColor="@color/text_muted"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- DATA SECTION -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="DADOS DA VIAGEM"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_muted"
+            android:letterSpacing="0.15"
+            android:layout_marginBottom="10dp"
+            android:layout_marginStart="4dp"/>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingLeft="16dp"
-            android:paddingTop="16dp"
-            android:paddingRight="16dp"
-            android:paddingBottom="80dp"
-            android:gravity="center">
+            android:background="@drawable/bg_card_modern"
+            android:layout_marginBottom="20dp">
 
-            <RelativeLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="32dp"
-                android:layout_marginBottom="0dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_centerInParent="true"
-                    android:text="Registro de Viagem"
-                    android:textSize="22sp"
-                    android:textStyle="bold"
-                    android:textColor="#FFFFFF" />
-
-                <ImageButton
-                    android:id="@+id/btnConfiguracoes"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_alignParentEnd="true"
-                    android:layout_centerVertical="true"
-                    android:background="?android:attr/selectableItemBackgroundBorderless"
-                    android:src="@drawable/ic_settings"
-                    android:contentDescription="Configurações" />
-            </RelativeLayout>
-
-            <TextView
-                android:id="@+id/txtOlaUsuario"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Olá!"
-                android:textSize="16sp"
-                android:textColor="#00E676"
-                android:fontFamily="sans-serif-medium"
-                android:letterSpacing="0.05"
-                android:layout_marginBottom="12dp" />
-
+            <!-- DATA -->
             <LinearLayout
+                android:id="@+id/row_data"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="56dp"
                 android:orientation="horizontal"
-                android:layout_marginBottom="12dp">
-
-                <Button
-                    android:id="@+id/btnFotoIda"
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_weight="1"
-                    android:text="📸 FOTO IDA"
-                    android:backgroundTint="#FF5722"
-                    android:layout_marginEnd="4dp"
-                    android:textSize="12sp"/>
-
-                <Button
-                    android:id="@+id/btnFotoVolta"
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_weight="1"
-                    android:text="📸 FOTO VOLTA"
-                    android:backgroundTint="#607D8B"
-                    android:layout_marginStart="4dp"
-                    android:enabled="false"
-                    android:textSize="12sp"/>
-            </LinearLayout>
-
-            <Button
-                android:id="@+id/btnFotoDespesa"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:text="📑 ESCANEAR RECIBO (DESPESA)"
-                android:backgroundTint="#9C27B0"
-                android:layout_marginBottom="12dp"
-                android:textSize="12sp"
-                android:enabled="false" />
-
-            <EditText
-                android:id="@+id/editData"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:hint="Data (DD/MM/AAAA)"
-                android:gravity="center"
-                android:textColor="#000000"
-                android:textColorHint="#666666"
-                android:background="@android:drawable/editbox_background"
-                android:layout_marginBottom="8dp"
-                android:inputType="phone"
-                android:textSize="14sp"/>
-
-            <EditText
-                android:id="@+id/editCondutor"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:hint="Nome do Condutor"
-                android:textColor="#000000"
-                android:textColorHint="#666666"
-                android:gravity="center"
-                android:background="@android:drawable/editbox_background"
-                android:layout_marginBottom="8dp"
-                android:textSize="14sp"/>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="8dp">
-
-                <EditText
-                    android:id="@+id/editHoraSaida"
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_weight="1"
-                    android:hint="Saída"
-                    android:textColor="#000000"
-                    android:textColorHint="#666666"
-                    android:gravity="center"
-                    android:layout_marginEnd="4dp"
-                    android:background="@android:drawable/editbox_background"
-                    android:inputType="time"
-                    android:textSize="14sp"/>
-
-                <EditText
-                    android:id="@+id/editHoraChegada"
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_weight="1"
-                    android:hint="Chegada"
-                    android:textColor="#000000"
-                    android:textColorHint="#666666"
-                    android:gravity="center"
-                    android:layout_marginStart="4dp"
-                    android:background="@android:drawable/editbox_background"
-                    android:inputType="time"
-                    android:textSize="14sp"/>
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="8dp">
-
-                <EditText
-                    android:id="@+id/editKmInicial"
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_weight="1"
-                    android:textColor="#000000"
-                    android:textColorHint="#666666"
-                    android:hint="KM Inicial"
-                    android:inputType="number"
-                    android:gravity="center"
-                    android:layout_marginEnd="4dp"
-                    android:background="@android:drawable/editbox_background"
-                    android:textSize="14sp"/>
-
-                <EditText
-                    android:id="@+id/editKmFinal"
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_weight="1"
-                    android:textColor="#000000"
-                    android:textColorHint="#666666"
-                    android:hint="KM Final"
-                    android:inputType="number"
-                    android:gravity="center"
-                    android:layout_marginStart="4dp"
-                    android:background="@android:drawable/editbox_background"
-                    android:textSize="14sp"/>
-            </LinearLayout>
-
-            <!-- ORIGEM E DESTINO COM AUTOCOMPLETE -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="8dp">
-
-                <AutoCompleteTextView
-                    android:id="@+id/editOrigem"
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_weight="1"
-                    android:hint="Origem"
-                    android:textColor="#000000"
-                    android:textColorHint="#666666"
-                    android:gravity="center"
-                    android:completionThreshold="1"
-                    android:background="@android:drawable/editbox_background"
-                    android:textSize="14sp"
-                    android:layout_marginEnd="4dp"/>
-
-                <AutoCompleteTextView
-                    android:id="@+id/editDestino"
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_weight="1"
-                    android:hint="Destino"
-                    android:textColor="#000000"
-                    android:textColorHint="#666666"
-                    android:gravity="center"
-                    android:completionThreshold="1"
-                    android:background="@android:drawable/editbox_background"
-                    android:textSize="14sp"
-                    android:layout_marginStart="4dp"/>
-            </LinearLayout>
-
-            <!-- CAMPO DE OBSERVAÇÕES -->
-            <EditText
-                android:id="@+id/editObservacoes"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="48dp"
-                android:hint="Observações"
-                android:textColor="#000000"
-                android:textColorHint="#666666"
-                android:gravity="center"
-                android:background="@android:drawable/editbox_background"
-                android:layout_marginBottom="8dp"
-                android:inputType="textMultiLine"
-                android:imeOptions="actionDone"
-                android:textSize="14sp"
-                android:padding="8dp"/>
-
-            <!-- SELEÇÃO DE VEÍCULO -->
-            <RadioGroup
-                android:id="@+id/radioGroupVeiculo"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center"
-                android:layout_marginBottom="8dp">
-
-                <RadioButton
-                    android:id="@+id/radioParticular"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Particular"
-                    android:textColor="#FFFFFF"
-                    android:buttonTint="#FFFFFF"
-                    android:checked="true"
-                    android:layout_marginEnd="16dp"
-                    android:textSize="14sp"/>
-
-                <RadioButton
-                    android:id="@+id/radioEmpresa"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Empresa"
-                    android:textColor="#FFFFFF"
-                    android:buttonTint="#FFFFFF"
-                    android:textSize="14sp"/>
-            </RadioGroup>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginTop="8dp">
-
-                <Button
-                    android:id="@+id/btnAdicionar"
-                    android:layout_width="0dp"
-                    android:layout_height="50dp"
-                    android:layout_weight="1"
-                    android:text="ADICIONAR"
-                    android:layout_marginEnd="4dp"
-                    android:backgroundTint="#4CAF50"
-                    android:textSize="12sp"/>
-
-                <Button
-                    android:id="@+id/btnGerarPdf"
-                    android:layout_width="0dp"
-                    android:layout_height="50dp"
-                    android:layout_weight="1"
-                    android:text="GERAR PDF"
-                    android:layout_marginStart="4dp"
-                    android:backgroundTint="#1A73E8"
-                    android:textSize="12sp"/>
-            </LinearLayout>
-
-            <Button
-                android:id="@+id/btnCompartilhar"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:layout_marginTop="8dp"
-                android:text="COMPARTILHAR ÚLTIMO PDF"
-                android:backgroundTint="#FF9800"
-                android:visibility="visible"
-                android:textSize="12sp"/>
-
-            <!-- LISTA DE VIAGENS ADICIONADAS -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Viagens do Dia:"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:layout_marginTop="12dp"
-                android:layout_marginBottom="4dp" />
-
-            <LinearLayout
-                android:id="@+id/containerViagens"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-
-            <Button
-                android:id="@+id/btnReset"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="LIMPAR TUDO / NOVO DIA"
-                android:backgroundTint="#F44336"
-                android:textColor="#FFFFFF"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/txtLinkCadastro"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Cadastrar Novo Usuário"
-                android:textColor="#4CAF50"
-                android:textSize="12sp"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:background="?attr/selectableItemBackground"
                 android:clickable="true"
-                android:focusable="true"
-                android:visibility="gone" />
+                android:focusable="true">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📅" android:textSize="15sp" android:layout_marginEnd="12dp" android:alpha="0.5"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="DATA" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                    <EditText android:id="@+id/editData" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="DD/MM/AAAA" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:inputType="phone"/>
+                </LinearLayout>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/border_color"/>
 
+            <!-- CONDUTOR -->
+            <LinearLayout
+                android:id="@+id/row_condutor"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="👤" android:textSize="15sp" android:layout_marginEnd="12dp" android:alpha="0.5"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MOTORISTA" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                    <EditText android:id="@+id/editCondutor" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:text="Luiz Gustavo" android:textColor="@color/text_main" android:textSize="14sp"/>
+                </LinearLayout>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/border_color"/>
+
+            <!-- HORARIOS -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="56dp" android:orientation="horizontal">
+                <LinearLayout
+                    android:id="@+id/row_hSaida"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🕐" android:textSize="15sp" android:layout_marginEnd="10dp" android:alpha="0.5"/>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="SAÍDA" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                        <EditText android:id="@+id/editHoraSaida" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="00:00" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:inputType="time"/>
+                    </LinearLayout>
+                </LinearLayout>
+                <View android:layout_width="1dp" android:layout_height="match_parent" android:background="@color/border_color"/>
+                <LinearLayout
+                    android:id="@+id/row_hChegada"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🕔" android:textSize="15sp" android:layout_marginEnd="10dp" android:alpha="0.5"/>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="CHEGADA" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                        <EditText android:id="@+id/editHoraChegada" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="00:00" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:inputType="time"/>
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/border_color"/>
+
+            <!-- KMs -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="56dp" android:orientation="horizontal">
+                <LinearLayout
+                    android:id="@+id/row_kmIni"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🛣️" android:textSize="15sp" android:layout_marginEnd="10dp" android:alpha="0.5"/>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="KM INICIAL" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                        <EditText android:id="@+id/editKmInicial" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="0" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:inputType="number"/>
+                    </LinearLayout>
+                </LinearLayout>
+                <View android:layout_width="1dp" android:layout_height="match_parent" android:background="@color/border_color"/>
+                <LinearLayout
+                    android:id="@+id/row_kmFin"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🏁" android:textSize="15sp" android:layout_marginEnd="10dp" android:alpha="0.5"/>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="KM FINAL" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                        <EditText android:id="@+id/editKmFinal" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="0" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:inputType="number"/>
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/border_color"/>
+
+            <!-- ORIGEM / DESTINO -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="56dp" android:orientation="horizontal">
+                <LinearLayout
+                    android:id="@+id/row_origem"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📍" android:textSize="15sp" android:layout_marginEnd="10dp" android:alpha="0.5"/>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ORIGEM" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                        <AutoCompleteTextView android:id="@+id/editOrigem" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Saída" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:completionThreshold="1"/>
+                    </LinearLayout>
+                    <ImageButton
+                        android:id="@+id/btnGpsOrigem"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@android:drawable/ic_menu_mylocation"
+                        app:tint="@color/accent_orange"
+                        android:alpha="0.6"
+                        android:contentDescription="GPS Origem"/>
+                </LinearLayout>
+                <View android:layout_width="1dp" android:layout_height="match_parent" android:background="@color/border_color"/>
+                <LinearLayout
+                    android:id="@+id/row_destino"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🎯" android:textSize="15sp" android:layout_marginEnd="10dp" android:alpha="0.5"/>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="DESTINO" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                        <AutoCompleteTextView android:id="@+id/editDestino" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Chegada" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:completionThreshold="1"/>
+                    </LinearLayout>
+                    <ImageButton
+                        android:id="@+id/btnGpsDestino"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@android:drawable/ic_menu_mylocation"
+                        app:tint="@color/accent_blue"
+                        android:alpha="0.6"
+                        android:contentDescription="GPS Destino"/>
+                </LinearLayout>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/border_color"/>
+
+            <!-- OBS -->
+            <LinearLayout
+                android:id="@+id/row_obs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="16dp"
+                android:gravity="start"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📝" android:textSize="15sp" android:layout_marginEnd="12dp" android:alpha="0.5"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="OBSERVAÇÕES" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                    <EditText android:id="@+id/editObservacoes" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Detalhes adicionais..." android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:minLines="2" android:gravity="top" android:inputType="textMultiLine"/>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- VEICULO SECTION -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TIPO DE VIAGEM"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_muted"
+            android:letterSpacing="0.15"
+            android:layout_marginBottom="10dp"
+            android:layout_marginStart="4dp"/>
+
+        <RadioGroup
+            android:id="@+id/radioGroupVeiculo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
+
+            <RadioButton
+                android:id="@+id/radioParticular"
+                android:layout_width="0dp"
+                android:layout_height="64dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_radio_modern"
+                android:button="@null"
+                android:padding="12dp"
+                android:text="Particular\nUso pessoal"
+                android:textColor="@color/text_main"
+                android:textSize="13sp"
+                android:layout_marginEnd="5dp"
+                android:gravity="center_vertical"
+                android:drawableStart="@android:drawable/btn_radio"
+                android:drawablePadding="8dp"
+                app:buttonTint="@color/accent_orange" />
+
+            <RadioButton
+                android:id="@+id/radioEmpresa"
+                android:layout_width="0dp"
+                android:layout_height="64dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_radio_modern"
+                android:button="@null"
+                android:padding="12dp"
+                android:text="Empresa\nUso corporativo"
+                android:textColor="@color/text_main"
+                android:textSize="13sp"
+                android:layout_marginStart="5dp"
+                android:gravity="center_vertical"
+                android:drawableStart="@android:drawable/btn_radio"
+                android:drawablePadding="8dp"
+                app:buttonTint="@color/accent_blue" />
+        </RadioGroup>
+
+        <!-- ACTIONS SECTION -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="10dp">
+
+            <Button
+                android:id="@+id/btnAdicionar"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="1"
+                android:text="Adicionar"
+                android:backgroundTint="@color/accent_green"
+                android:textColor="#FFFFFF"
+                android:fontFamily="sans-serif-condensed"
+                android:textStyle="bold"
+                android:layout_marginEnd="5dp"
+                app:cornerRadius="14dp" />
+
+            <Button
+                android:id="@+id/btnGerarPdf"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="1"
+                android:text="Gerar PDF"
+                android:backgroundTint="@color/accent_blue"
+                android:textColor="#FFFFFF"
+                android:fontFamily="sans-serif-condensed"
+                android:textStyle="bold"
+                android:layout_marginStart="5dp"
+                app:cornerRadius="14dp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnCompartilhar"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Compartilhar Último PDF"
+            android:backgroundTint="@color/surface"
+            android:textColor="@color/accent_gold"
+            android:fontFamily="sans-serif-condensed"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp"
+            app:strokeColor="#4DF59E0B"
+            app:strokeWidth="1dp"
+            app:cornerRadius="14dp" />
+
+        <!-- LISTA SECTION -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp">
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:layout_marginBottom="16dp"
-                android:text="Aplicativo criado por Luiz Gustavo"
-                android:textColor="#888888"
+                android:text="Viagens do Dia"
+                android:textColor="@color/text_main"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+            <TextView
+                android:id="@+id/txtViagensCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:text="0 registros"
+                android:textColor="@color/text_muted"
                 android:textSize="11sp"
-                android:textStyle="italic" />
+                android:background="@drawable/bg_button_modern"
+                android:padding="4dp" />
+        </RelativeLayout>
 
-        </LinearLayout>
-    </ScrollView>
+        <LinearLayout
+            android:id="@+id/containerViagens"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="20dp" />
 
-</RelativeLayout>
+        <Button
+            android:id="@+id/btnReset"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Limpar Tudo · Novo Dia"
+            android:backgroundTint="@android:color/transparent"
+            android:textColor="#B3EF4444"
+            app:strokeColor="#4DEF4444"
+            app:strokeWidth="1.5dp"
+            app:cornerRadius="14dp"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Aplicativo criado por Luiz Gustavo"
+            android:textColor="#33F0F0F5"
+            android:textSize="10sp"
+            android:gravity="center"
+            android:letterSpacing="0.05" />
+
+    </LinearLayout>
+</ScrollView>
