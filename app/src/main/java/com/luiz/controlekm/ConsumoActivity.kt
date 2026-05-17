@@ -64,7 +64,8 @@ class ConsumoActivity : AppCompatActivity() {
                         obj.getString("destino"),
                         obj.getString("hSaida"), obj.getString("hChegada"),
                         obj.getInt("kmIni"), obj.getInt("kmFin"), obj.getDouble("custo"),
-                        if (obj.has("observacoes")) obj.getString("observacoes") else ""
+                        if (obj.has("observacoes")) obj.getString("observacoes") else "",
+                        if (obj.has("isEmpresa")) obj.getBoolean("isEmpresa") else false
                     )
                     
                     if (!viagensPorSemana.containsKey(semanaAno)) {
@@ -108,7 +109,9 @@ class ConsumoActivity : AppCompatActivity() {
         }
 
         semanasOrdenadas.forEach { semana ->
-            val listaViagens = viagensPorSemana[semana] ?: emptyList()
+            val listaCompleta = viagensPorSemana[semana] ?: emptyList()
+            // Filtra para contar apenas viagens PARTICULARES no consumo/dashboard semanal
+            val listaViagens = listaCompleta.filter { !it.isEmpresa }
             var totalKmSemana = 0
             
             if (listaViagens.isNotEmpty()) {

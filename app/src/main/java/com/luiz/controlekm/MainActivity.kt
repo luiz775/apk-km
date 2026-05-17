@@ -69,7 +69,8 @@ data class Viagem(
     val kmIni: Int,
     val kmFin: Int,
     val custo: Double,
-    val observacoes: String = ""
+    val observacoes: String = "",
+    val isEmpresa: Boolean = false
 )
 
 // 2. O "Molde" da Despesa
@@ -290,6 +291,20 @@ class MainActivity : AppCompatActivity() {
                 }
                 arrayFuel.put(objFuel)
                 prefsApp.edit().putString(fuelKey, arrayFuel.toString()).apply()
+
+                // NOVO: Sincroniza combustível com a Nuvem
+                if (currentUser != null) {
+                    val dadosFuel = hashMapOf(
+                        "tecnicoId" to currentUser.uid,
+                        "data" to dataAtual,
+                        "valor" to valorNovo,
+                        "timestamp" to FieldValue.serverTimestamp()
+                    )
+                    db.collection("combustivel").add(dadosFuel)
+                    
+                    // Atualiza também o valor acumulado no doc do veículo na nuvem
+                    db.collection("veiculos").document(currentUser.uid).update("combustivel", totalMascarado)
+                }
 
                 atualizarDashboard()
                 dialog.dismiss()
@@ -576,7 +591,14 @@ class MainActivity : AppCompatActivity() {
         val horaAtual = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
         editHoraSaida.setText(prefs.getString("rascunho_hSaida", horaAtual))
         
-        editKmInicial.setText(prefs.getString("rascunho_kmIni", ""))
+        val rascunhoKm = prefs.getString("rascunho_kmIni", "")
+        if (rascunhoKm.isNullOrEmpty()) {
+            val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
+            editKmInicial.setText(prefsVeiculo.getString("veiculo_km_ini", ""))
+        } else {
+            editKmInicial.setText(rascunhoKm)
+        }
+
         editObservacoes.setText(prefs.getString("rascunho_obs", ""))
 
         // --- BUSCA NOME DO TÉCNICO NO FIRESTORE ---
@@ -731,7 +753,8 @@ class MainActivity : AppCompatActivity() {
                         obj.getString("destino"),
                         obj.getString("hSaida"), obj.getString("hChegada"),
                         obj.getInt("kmIni"), obj.getInt("kmFin"), obj.getDouble("custo"),
-                        if (obj.has("observacoes")) obj.getString("observacoes") else ""
+                        if (obj.has("observacoes")) obj.getString("observacoes") else "",
+                        if (obj.has("isEmpresa")) obj.getBoolean("isEmpresa") else false
                     ))
                 }
             } catch (e: Exception) { e.printStackTrace() }
@@ -919,10 +942,13 @@ class MainActivity : AppCompatActivity() {
                 adapterDestino.notifyDataSetChanged()
             }
 
+            val isEmpresaViagem = findViewById<RadioButton>(R.id.radioEmpresa).isChecked
+
             val v = Viagem(
                 dataTxt, condutorTxt, origemTxt, destinoTxt,
                 saidaTxt, chegadaTxt,
-                kmI, kmF, kmTotal * 1.20, editObservacoes.text.toString()
+                kmI, kmF, kmTotal * 1.20, editObservacoes.text.toString(),
+                isEmpresaViagem
             )
 
             listaDeViagens.add(v)
@@ -937,6 +963,7 @@ class MainActivity : AppCompatActivity() {
                 put("hSaida", v.hSaida); put("hChegada", v.hChegada)
                 put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
                 put("observacoes", v.observacoes)
+                put("isEmpresa", v.isEmpresa)
             }
             arrayHistorico.put(obj)
             prefs.edit().putString(historicoKey, arrayHistorico.toString()).apply()
@@ -948,7 +975,7 @@ class MainActivity : AppCompatActivity() {
             editObservacoes.text.clear()
             editHoraSaida.text.clear()
             editHoraChegada.text.clear()
-            editKmInicial.text.clear()
+            editKmInicial.setText(kmFTxt) // Preenche o inicial da próxima com o final desta
             editKmFinal.text.clear()
 
             atualizarListaVisual()
@@ -1020,7 +1047,10 @@ class MainActivity : AppCompatActivity() {
                     editObservacoes.text.clear()
                     editHoraSaida.text.clear()
                     editHoraChegada.text.clear()
-                    editKmInicial.text.clear()
+                    
+                    // Mantém o KM Inicial baseado no último hodômetro registrado
+                    val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
+                    editKmInicial.setText(prefsVeiculo.getString("veiculo_km_ini", ""))
                     editKmFinal.text.clear()
                     
                     findViewById<RadioButton>(R.id.radioParticular).isChecked = true
@@ -1054,6 +1084,75 @@ class MainActivity : AppCompatActivity() {
         
         validarBotoes() // Chama no início
         atualizarDashboard()
+        sincronizarDadosUsuario()
+    }
+
+    private fun sincronizarDadosUsuario() {
+        val currentUser = auth.currentUser ?: return
+        
+        // 1. Sincroniza Dados do Veículo
+        db.collection("veiculos").document(currentUser.uid).get()
+            .addOnSuccessListener { doc ->
+                if (doc != null && doc.exists()) {
+                    val prefsV = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
+                    prefsV.edit().apply {
+                        putString("veiculo_carro", doc.getString("carro"))
+                        putString("veiculo_placa", doc.getString("placa"))
+                        putString("veiculo_km_ini", doc.getString("kmIni"))
+                        putString("veiculo_oleo", doc.getString("oleo"))
+                        putString("veiculo_outros", doc.getString("outros"))
+                        putString("veiculo_gasto_combustivel", doc.getString("combustivel"))
+                        putString("veiculo_gasto_manutencao", doc.getString("manutencao"))
+                        apply()
+                    }
+                    atualizarDashboard()
+                }
+            }
+
+        // 2. Sincroniza Histórico de Viagens (para o Dashboard Mensal)
+        db.collection("viagens").whereEqualTo("tecnicoId", currentUser.uid).get()
+            .addOnSuccessListener { documents ->
+                if (!documents.isEmpty) {
+                    val array = JSONArray()
+                    for (doc in documents) {
+                        val obj = JSONObject().apply {
+                            put("data", doc.getString("data"))
+                            put("condutor", doc.getString("condutor"))
+                            put("origem", doc.getString("origem"))
+                            put("destino", doc.getString("destino"))
+                            put("hSaida", doc.getString("hSaida"))
+                            put("hChegada", doc.getString("hChegada"))
+                            put("kmIni", doc.getLong("kmIni")?.toInt())
+                            put("kmFin", doc.getLong("kmFin")?.toInt())
+                            put("custo", doc.getDouble("custo"))
+                            put("observacoes", doc.getString("observacoes"))
+                            put("isEmpresa", doc.getBoolean("isEmpresa") ?: false)
+                        }
+                        array.put(obj)
+                    }
+                    val prefsA = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+                    prefsA.edit().putString("historico_local_${currentUser.uid}", array.toString()).apply()
+                    atualizarDashboard()
+                }
+            }
+
+        // 3. Sincroniza Histórico de Combustível
+        db.collection("combustivel").whereEqualTo("tecnicoId", currentUser.uid).get()
+            .addOnSuccessListener { documents ->
+                if (!documents.isEmpty) {
+                    val arrayFuel = JSONArray()
+                    for (doc in documents) {
+                        val obj = JSONObject().apply {
+                            put("data", doc.getString("data"))
+                            put("valor", doc.getDouble("valor"))
+                        }
+                        arrayFuel.put(obj)
+                    }
+                    val prefsA = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+                    prefsA.edit().putString("historico_combustivel_local_${currentUser.uid}", arrayFuel.toString()).apply()
+                    atualizarDashboard()
+                }
+            }
     }
 
     private fun verificarBloqueio() {
@@ -1211,6 +1310,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        
+        // Atualiza o KM Inicial se estiver vazio (ex: após configurar o veículo ou limpar dados)
+        if (editKmInicial.text.isNullOrEmpty()) {
+            val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
+            val kmSalvo = prefsVeiculo.getString("veiculo_km_ini", "")
+            if (!kmSalvo.isNullOrEmpty()) {
+                editKmInicial.setText(kmSalvo)
+            }
+        }
+
         atualizarDashboard()
     }
 
@@ -1237,11 +1346,12 @@ class MainActivity : AppCompatActivity() {
                 val data = obj.getString("data")
                 val kmf = obj.getInt("kmFin")
 
-                // Atualiza o hodômetro global (para o óleo)
+                // Atualiza o hodômetro global (para o óleo) - SEMPRE atualiza
                 if (kmf > kmAtualOdometer) kmAtualOdometer = kmf
 
-                // Agrupa para o resumo mensal (apenas mês atual)
-                if (data.endsWith(currentMonthYear)) {
+                // Agrupa para o resumo mensal (apenas mês atual e SE NÃO for Empresa)
+                val isEmpresaViagem = if (obj.has("isEmpresa")) obj.getBoolean("isEmpresa") else false
+                if (data.endsWith(currentMonthYear) && !isEmpresaViagem) {
                     if (!viagensPorData.containsKey(data)) viagensPorData[data] = mutableListOf()
                     viagensPorData[data]?.add(obj)
                 }
@@ -1255,9 +1365,35 @@ class MainActivity : AppCompatActivity() {
             }
             
         } catch (e: Exception) { e.printStackTrace() }
+
+        // 3. Inclui viagens que ainda estão na lista da tela (não geradas em PDF)
+        if (listaDeViagens.isNotEmpty()) {
+            val viagensPorDataLista = listaDeViagens.groupBy { it.data }
+            viagensPorDataLista.forEach { (data, lista) ->
+                if (data.endsWith(currentMonthYear)) {
+                    // Filtra para o Dashboard (não conta se for Empresa)
+                    val listaFiltrada = lista.filter { !it.isEmpresa }
+                    if (listaFiltrada.isNotEmpty()) {
+                        val kmi = listaFiltrada.minOf { it.kmIni }
+                        val kmf = listaFiltrada.maxOf { it.kmFin }
+                        totalKm += (kmf - kmi)
+                    }
+                    
+                    // Atualiza hodômetro para óleo (independente de ser Empresa ou não)
+                    val kmfMaxDia = lista.maxOf { it.kmFin }
+                    if (kmfMaxDia > kmAtualOdometer) kmAtualOdometer = kmfMaxDia
+                }
+            }
+        }
         
         txtDashKmTotal.text = totalKm.toString()
         txtDashCustoTotal.text = String.format(Locale.forLanguageTag("pt-BR"), "R$ %.2f", totalKm * 1.20)
+
+        // Sincroniza o KM Atual no banco do veículo (SÓ SE FOR MAIOR QUE O SALVO)
+        val kmSalvoAtual = prefsVeiculo.getString("veiculo_km_ini", "0")?.toIntOrNull() ?: 0
+        if (kmAtualOdometer > kmSalvoAtual) {
+            prefsVeiculo.edit().putString("veiculo_km_ini", kmAtualOdometer.toString()).apply()
+        }
 
         val gastoComb = prefsVeiculo.getString("veiculo_gasto_combustivel", "0,00")
         val kmTrocaOleo = prefsVeiculo.getString("veiculo_oleo", "0")?.toIntOrNull() ?: 0
@@ -1337,6 +1473,7 @@ class MainActivity : AppCompatActivity() {
                     put("hSaida", v.hSaida); put("hChegada", v.hChegada)
                     put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
                     put("observacoes", v.observacoes)
+                    put("isEmpresa", v.isEmpresa)
                 }
                 array.put(obj)
             }
@@ -1431,7 +1568,8 @@ class MainActivity : AppCompatActivity() {
                                             doc.get("kmIni").toString().toIntOrNull() ?: 0,
                                             doc.get("kmFin").toString().toIntOrNull() ?: 0,
                                             doc.get("custo").toString().toDoubleOrNull() ?: 0.0,
-                                            doc.getString("observacoes") ?: ""
+                                            doc.getString("observacoes") ?: "",
+                                            doc.getBoolean("isEmpresa") ?: false
                                         ))
                                     }
                                     // Ordena por data (opcional, já que o PDF organiza na ordem da lista)
@@ -1465,7 +1603,11 @@ class MainActivity : AppCompatActivity() {
                         .remove("rascunho_destino")
                         .remove("rascunho_kmIni")
                         .remove("rascunho_obs")
+                        .remove("rascunho_condutor")
                         .apply()
+                    
+                    val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
+                    prefsVeiculo.edit().clear().apply()
 
                     auth.signOut()
                     startActivity(Intent(this, LoginActivity::class.java))
@@ -1511,6 +1653,7 @@ class MainActivity : AppCompatActivity() {
                 "kmFin" to v.kmFin,
                 "custo" to v.custo,
                 "observacoes" to v.observacoes,
+                "isEmpresa" to v.isEmpresa,
                 "data_registro" to FieldValue.serverTimestamp()
             )
 
@@ -1562,6 +1705,7 @@ class MainActivity : AppCompatActivity() {
                         put("kmFin", v.kmFin)
                         put("custo", v.custo)
                         put("obs", v.observacoes)
+                        put("isEmpresa", v.isEmpresa)
                     }
                     jsonViagens.put(obj)
                 }
@@ -1725,7 +1869,6 @@ class MainActivity : AppCompatActivity() {
     private fun gerarRelatorioCompleto(viagens: List<Viagem>, isExportacaoHistorico: Boolean = false) {
         val document = PdfDocument()
         val paint = Paint()
-        val isParticular = findViewById<RadioButton>(R.id.radioParticular).isChecked
 
         // Variáveis de controle para múltiplas páginas
         var currentPageNumber = 1
@@ -1755,10 +1898,8 @@ class MainActivity : AppCompatActivity() {
             canv.drawText("KMF", 450f, y, paint)
             canv.drawText("URB.", 485f, y, paint)
             canv.drawText("TOTAL", 520f, y, paint)
+            canv.drawText("CUSTO", 560f, y, paint)
             
-            if (isParticular) {
-                canv.drawText("CUSTO", 560f, y, paint)
-            }
             canv.drawLine(20f, y + 8f, 575f, y + 8f, paint)
         }
 
@@ -1864,13 +2005,14 @@ class MainActivity : AppCompatActivity() {
             val totalViagem = (v.kmFin - v.kmIni) + kmUrbano
             canvas.drawText(totalViagem.toString(), 520f, yPos, paint)
             
-            if (isParticular) {
+            // Se for particular (não empresa), desenha o custo
+            if (!v.isEmpresa) {
                 val custoCalculado = totalViagem * 1.20
                 canvas.drawText(String.format(Locale.forLanguageTag("pt-BR"), "%.2f", custoCalculado), 560f, yPos, paint)
+                
+                kmSomaViagens += (v.kmFin - v.kmIni)
+                kmSomaCidade += kmUrbano
             }
-            
-            kmSomaViagens += (v.kmFin - v.kmIni)
-            kmSomaCidade += kmUrbano
             
             val saltoLinha = Math.max(offsetOrigem, Math.max(offsetDestino, offsetObs))
             yPos += 25f + saltoLinha
@@ -1898,8 +2040,9 @@ class MainActivity : AppCompatActivity() {
         }
         val custoGeral = kmGeral * 1.20
 
-        val resumoTotal = if (isParticular) {
-            "KM ESTRADA: $kmSomaViagens | KM CIDADE: $kmSomaCidade | TOTAL: $kmGeral KM | VALOR: R$ ${String.format(Locale.forLanguageTag("pt-BR"), "%.2f", custoGeral)}"
+        val temParticular = viagens.any { !it.isEmpresa }
+        val resumoTotal = if (temParticular) {
+            "KM ESTRADA: $kmSomaViagens | KM CIDADE: $kmSomaCidade | TOTAL: $kmGeral KM | REEMBOLSO: R$ ${String.format(Locale.forLanguageTag("pt-BR"), "%.2f", kmGeral * 1.20)}"
         } else {
             "KM ESTRADA: $kmSomaViagens | KM CIDADE: $kmSomaCidade | TOTAL: $kmGeral KM"
         }
@@ -1965,6 +2108,24 @@ class MainActivity : AppCompatActivity() {
         try {
             document.writeTo(FileOutputStream(arquivo))
             if (!isExportacaoHistorico) {
+                // Adiciona ao Histórico Permanente (que alimenta o Consumo Semanal)
+                val prefsLocal = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+                val currentUser = auth.currentUser
+                val historicoKey = if (currentUser != null) "historico_local_${currentUser.uid}" else "historico_geral_local"
+                val historicoAtual = prefsLocal.getString(historicoKey, "[]")
+                val arrayHistorico = JSONArray(historicoAtual)
+                
+                listaDeViagens.forEach { v ->
+                    val obj = JSONObject().apply {
+                        put("data", v.data); put("condutor", v.condutor); put("origem", v.origem); put("destino", v.destino)
+                        put("hSaida", v.hSaida); put("hChegada", v.hChegada)
+                        put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
+                        put("observacoes", v.observacoes)
+                    }
+                    arrayHistorico.put(obj)
+                }
+                prefsLocal.edit().putString(historicoKey, arrayHistorico.toString()).apply()
+
                 listaDeViagens.clear()
                 fotoIdaPath = null
                 fotoVoltaPath = null

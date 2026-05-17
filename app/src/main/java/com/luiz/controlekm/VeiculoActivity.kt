@@ -7,8 +7,14 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
 
 class VeiculoActivity : AppCompatActivity() {
+
+    private val auth by lazy { Firebase.auth }
+    private val db by lazy { Firebase.firestore }
 
     private lateinit var editCarro: EditText
     private lateinit var editPlaca: EditText
@@ -70,7 +76,21 @@ class VeiculoActivity : AppCompatActivity() {
             editor.putString("veiculo_gasto_manutencao", manutencao)
             editor.apply()
 
-            Toast.makeText(this, "Informações do veículo salvas!", Toast.LENGTH_SHORT).show()
+            // Salvar na Nuvem (Firestore) para persistência entre logins
+            auth.currentUser?.let { user ->
+                val dadosVeiculo = hashMapOf(
+                    "carro" to carro,
+                    "placa" to placa,
+                    "kmIni" to kmIni,
+                    "oleo" to oleo,
+                    "outros" to outros,
+                    "combustivel" to combustivel,
+                    "manutencao" to manutencao
+                )
+                db.collection("veiculos").document(user.uid).set(dadosVeiculo)
+            }
+
+            Toast.makeText(this, "Informações do veículo salvas na nuvem!", Toast.LENGTH_SHORT).show()
             finish()
         }
     }

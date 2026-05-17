@@ -2,6 +2,7 @@ package com.luiz.controlekm
 
 import android.graphics.Color
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
@@ -37,12 +38,8 @@ class HistoricoActivity : AppCompatActivity() {
         val btnApagarTudo = findViewById<ImageButton>(R.id.btnApagarTudo)
 
         btnVoltar.setOnClickListener { finish() }
-        
         btnFiltro.setOnClickListener { mostrarMenuFiltro(it) }
-
-        btnApagarTudo.setOnClickListener {
-            apagarTodoHistorico()
-        }
+        btnApagarTudo.setOnClickListener { apagarTodoHistorico() }
 
         // 1. CARREGAR HISTÓRICO LOCAL IMEDIATAMENTE
         carregarDadosLocais()
@@ -74,13 +71,11 @@ class HistoricoActivity : AppCompatActivity() {
                                 doc.get("kmIni").toString().toIntOrNull() ?: 0,
                                 doc.get("kmFin").toString().toIntOrNull() ?: 0,
                                 doc.get("custo").toString().toDoubleOrNull() ?: 0.0,
-                                doc.getString("observacoes") ?: ""
+                                doc.getString("observacoes") ?: "",
+                                doc.getBoolean("isEmpresa") ?: false
                             ))
                         }
                         ordenarEPresentar(fullListaViagens)
-                        Toast.makeText(this, "Histórico atualizado!", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this, "Nenhuma viagem nova na nuvem.", Toast.LENGTH_SHORT).show()
                     }
                 }
                 .addOnFailureListener {
@@ -88,51 +83,6 @@ class HistoricoActivity : AppCompatActivity() {
                     Toast.makeText(this, "Erro ao atualizar: Verifique sua conexão.", Toast.LENGTH_SHORT).show()
                 }
         }
-    }
-
-    private fun apagarTodoHistorico() {
-        AlertDialog.Builder(this)
-            .setTitle("Apagar Todo o Histórico?")
-            .setMessage("Isso removerá o histórico local e também os registros salvos na nuvem. Deseja continuar?")
-            .setPositiveButton("Sim, Apagar Tudo") { _, _ ->
-                val currentUser = auth.currentUser
-                if (currentUser == null) return@setPositiveButton
-
-                progressHistorico.visibility = View.VISIBLE
-                
-                // 1. Limpa Local
-                val prefs = getSharedPreferences("DadosApp", MODE_PRIVATE)
-                val historicoKey = "historico_local_${currentUser.uid}"
-                prefs.edit().remove(historicoKey).apply()
-
-                // 2. Limpa Nuvem (Firestore)
-                db.collection("viagens")
-                    .whereEqualTo("tecnicoId", currentUser.uid)
-                    .get()
-                    .addOnSuccessListener { documents ->
-                        val batch = db.batch()
-                        for (doc in documents) {
-                            batch.delete(doc.reference)
-                        }
-                        
-                        batch.commit().addOnCompleteListener { task ->
-                            progressHistorico.visibility = View.GONE
-                            if (task.isSuccessful) {
-                                fullListaViagens.clear()
-                                exibirViagens(fullListaViagens)
-                                Toast.makeText(this, "Histórico limpo (Celular e Nuvem)!", Toast.LENGTH_LONG).show()
-                            } else {
-                                Toast.makeText(this, "Erro ao limpar nuvem, mas local foi apagado.", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                    .addOnFailureListener {
-                        progressHistorico.visibility = View.GONE
-                        Toast.makeText(this, "Erro ao acessar a nuvem para apagar.", Toast.LENGTH_SHORT).show()
-                    }
-            }
-            .setNegativeButton("Cancelar", null)
-            .show()
     }
 
     private fun carregarDadosLocais() {
@@ -153,7 +103,8 @@ class HistoricoActivity : AppCompatActivity() {
                     obj.getString("destino"),
                     obj.getString("hSaida"), obj.getString("hChegada"),
                     obj.getInt("kmIni"), obj.getInt("kmFin"), obj.getDouble("custo"),
-                    if (obj.has("observacoes")) obj.getString("observacoes") else ""
+                    if (obj.has("observacoes")) obj.getString("observacoes") else "",
+                    if (obj.has("isEmpresa")) obj.getBoolean("isEmpresa") else false
                 ))
             }
             ordenarEPresentar(fullListaViagens)
@@ -173,7 +124,7 @@ class HistoricoActivity : AppCompatActivity() {
             val emptyTxt = TextView(this)
             emptyTxt.text = "Nenhuma viagem encontrada."
             emptyTxt.setTextColor(Color.GRAY)
-            emptyTxt.gravity = android.view.Gravity.CENTER
+            emptyTxt.gravity = Gravity.CENTER
             containerHistorico.addView(emptyTxt)
             return
         }
@@ -213,6 +164,53 @@ class HistoricoActivity : AppCompatActivity() {
             }
             containerHistorico.addView(view)
         }
+    }
+
+    private fun apagarTodoHistorico() {
+        AlertDialog.Builder(this)
+            .setTitle("Apagar Todo o Histórico?")
+            .setMessage("Isso removerá o histórico local e também os registros salvos na nuvem. Deseja continuar?")
+            .setPositiveButton("Sim, Apagar Tudo") { _, _ ->
+                val currentUser = auth.currentUser
+                if (currentUser == null) return@setPositiveButton
+
+                progressHistorico.visibility = View.VISIBLE
+                
+                // 1. Limpa Local
+                val prefs = getSharedPreferences("DadosApp", MODE_PRIVATE)
+                prefs.edit().remove("historico_local_${currentUser.uid}").apply()
+                prefs.edit().remove("historico_combustivel_local_${currentUser.uid}").apply()
+
+                // 2. Limpa Nuvem (Firestore - Viagens e Combustível)
+                db.collection("viagens")
+                    .whereEqualTo("tecnicoId", currentUser.uid)
+                    .get()
+                    .addOnSuccessListener { vDocs ->
+                        db.collection("combustivel")
+                            .whereEqualTo("tecnicoId", currentUser.uid)
+                            .get()
+                            .addOnSuccessListener { fDocs ->
+                                val batch = db.batch()
+                                for (doc in vDocs) batch.delete(doc.reference)
+                                for (doc in fDocs) batch.delete(doc.reference)
+                                
+                                batch.commit().addOnCompleteListener { task ->
+                                    progressHistorico.visibility = View.GONE
+                                    if (task.isSuccessful) {
+                                        fullListaViagens.clear()
+                                        exibirViagens(fullListaViagens)
+                                        Toast.makeText(this, "Histórico completo limpo da nuvem!", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                    }
+                    .addOnFailureListener {
+                        progressHistorico.visibility = View.GONE
+                        Toast.makeText(this, "Erro ao acessar a nuvem para apagar.", Toast.LENGTH_SHORT).show()
+                    }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun mostrarMenuFiltro(view: View) {
