@@ -16,10 +16,11 @@
         android:layout_marginBottom="20dp"/>
 
     <TextView
+        android:id="@+id/txtTituloDespesa"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="DADOS DA DESPESA"
-        android:textColor="#80FFFFFF"
+        android:textColor="@color/text_muted"
         android:textSize="12sp"
         android:textStyle="bold"
         android:letterSpacing="0.1"
@@ -27,6 +28,7 @@
 
     <!-- CATEGORIA -->
     <TextView
+        android:id="@+id/txtLabelCategoria"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Selecione a Categoria"
@@ -35,6 +37,7 @@
         android:layout_marginBottom="8dp"/>
 
     <FrameLayout
+        android:id="@+id/containerSpinnerCategoria"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="@drawable/bg_button_modern"
@@ -49,6 +52,7 @@
 
     <!-- VALOR -->
     <TextView
+        android:id="@+id/txtLabelValor"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Valor do Recibo (R$)"
@@ -64,10 +68,10 @@
         android:hint="0,00"
         android:inputType="numberDecimal"
         android:paddingHorizontal="20dp"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/text_main"
         android:textSize="24sp"
         android:textStyle="bold"
-        android:textColorHint="#33FFFFFF"
+        android:textColorHint="@color/text_hint"
         android:layout_marginBottom="32dp"/>
 
     <LinearLayout

@@ -24,6 +24,14 @@
             android:exported="false" />
 
         <activity
+            android:name=".VeiculoActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ConsumoActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".LoginActivity"
             android:exported="true">
             <intent-filter>

@@ -18,7 +18,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="CONFIRMAR RECIBO"
-        android:textColor="#80FFFFFF"
+        android:textColor="@color/text_muted"
         android:textSize="12sp"
         android:textStyle="bold"
         android:letterSpacing="0.1"
@@ -30,7 +30,7 @@
         android:layout_height="320dp"
         app:cardCornerRadius="16dp"
         app:cardElevation="0dp"
-        android:backgroundTint="#000000"
+        android:backgroundTint="@color/surface2"
         android:layout_marginBottom="20dp">
         <ImageView
             android:id="@+id/imgPreviewScan"
@@ -44,7 +44,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="A imagem está na posição correta?"
-        android:textColor="#F0F0F5"
+        android:textColor="@color/text_main"
         android:textSize="14sp"
         android:gravity="center"
         android:layout_marginBottom="24dp"/>

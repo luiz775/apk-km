@@ -6,6 +6,7 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -185,9 +186,9 @@ class HistoricoActivity : AppCompatActivity() {
             val kmTotal = viagem.kmFin - viagem.kmIni
 
             text1.text = "${viagem.origem} > ${viagem.destino} (${viagem.data})"
-            text1.setTextColor(Color.WHITE)
+            text1.setTextColor(ContextCompat.getColor(this, R.color.text_main))
             text2.text = "KM: $kmTotal (I: ${viagem.kmIni} F: ${viagem.kmFin}) | R$ ${String.format("%.2f", viagem.custo)}"
-            text2.setTextColor(Color.LTGRAY)
+            text2.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
 
             view.setPadding(0, 20, 0, 20)
             view.setOnClickListener {

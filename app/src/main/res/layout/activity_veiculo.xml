@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="@drawable/bg_ambient">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- HEADER -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="24dp">
+
+            <ImageButton
+                android:id="@+id/btnVoltarVeiculo"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:background="@drawable/bg_button_modern"
+                android:src="@android:drawable/ic_menu_revert"
+                app:tint="@color/text_main"
+                android:contentDescription="Voltar" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:text="INFORMAÇÕES DO VEÍCULO"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_main"
+                android:fontFamily="sans-serif-condensed-medium"
+                android:letterSpacing="0.1" />
+        </RelativeLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_modern"
+            android:padding="4dp">
+
+            <!-- CARRO -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🚗" android:textSize="18sp" android:layout_marginEnd="12dp"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MODELO DO CARRO" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                    <EditText android:id="@+id/editVeiculoCarro" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Ex: Corolla" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="15sp"/>
+                </LinearLayout>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/border_color"/>
+
+            <!-- PLACA -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🔢" android:textSize="18sp" android:layout_marginEnd="12dp"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PLACA" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                    <EditText android:id="@+id/editVeiculoPlaca" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Ex: ABC-1234" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="15sp" android:inputType="textCapCharacters"/>
+                </LinearLayout>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/border_color"/>
+
+            <!-- KM INICIAL -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🛣️" android:textSize="18sp" android:layout_marginEnd="12dp"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="KM ATUAL / INICIAL" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                    <EditText android:id="@+id/editVeiculoKmIni" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="0" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="15sp" android:inputType="number"/>
+                </LinearLayout>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/border_color"/>
+
+            <!-- TROCA OLEO -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🛢️" android:textSize="18sp" android:layout_marginEnd="12dp"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PRÓXIMA TROCA DE ÓLEO (KM)" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                    <EditText android:id="@+id/editVeiculoOleo" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Ex: 55000" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="15sp" android:inputType="number"/>
+                </LinearLayout>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/border_color"/>
+
+            <!-- OUTRAS MANUTENÇÕES -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="16dp"
+                android:gravity="start">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🔧" android:textSize="18sp" android:layout_marginEnd="12dp"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="OUTRAS MANUTENÇÕES" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                    <EditText android:id="@+id/editVeiculoOutros" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Freios, Pneus, etc..." android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="14sp" android:minLines="2" android:gravity="top" android:inputType="textMultiLine"/>
+                </LinearLayout>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/border_color"/>
+
+            <!-- GASTO COMBUSTIVEL -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="⛽" android:textSize="18sp" android:layout_marginEnd="12dp"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="TOTAL GASTO COM COMBUSTÍVEL (R$)" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                    <EditText android:id="@+id/editVeiculoGastoCombustivel" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="0,00" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="15sp" android:inputType="numberDecimal"/>
+                </LinearLayout>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/border_color"/>
+
+            <!-- GASTO MANUTENCAO -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🛠️" android:textSize="18sp" android:layout_marginEnd="12dp"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="TOTAL GASTO COM MANUTENÇÃO (R$)" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
+                    <EditText android:id="@+id/editVeiculoGastoManutencao" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="0,00" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="15sp" android:inputType="numberDecimal"/>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnSalvarVeiculo"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="24dp"
+            android:text="SALVAR INFORMAÇÕES"
+            android:backgroundTint="@color/accent_blue"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            app:cornerRadius="14dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Estas informações serão salvas localmente."
+            android:textColor="@color/text_muted"
+            android:textSize="11sp"
+            android:gravity="center" />
+
+    </LinearLayout>
+</ScrollView>

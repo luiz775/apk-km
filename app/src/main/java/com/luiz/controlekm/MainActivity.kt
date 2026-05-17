@@ -23,6 +23,7 @@ import android.widget.*
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -117,6 +118,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnFotoDespesa: View
     private lateinit var btnReset: Button
     private lateinit var btnConfiguracoes: ImageButton
+    private lateinit var btnTrocarTema: ImageButton
     private lateinit var radioGroupVeiculo: RadioGroup
     private lateinit var containerViagens: LinearLayout
     private lateinit var txtOlaUsuario: TextView
@@ -126,7 +128,12 @@ class MainActivity : AppCompatActivity() {
     // Dashboard elements
     private lateinit var txtDashKmTotal: TextView
     private lateinit var txtDashCustoTotal: TextView
-    private lateinit var txtDashRecibosTotal: TextView
+    private lateinit var txtDashGastoCombustivel: TextView
+    private lateinit var txtDashFaltaOleo: TextView
+
+    private lateinit var txtCountIda: TextView
+    private lateinit var txtCountVolta: TextView
+    private lateinit var txtCountDespesa: TextView
     
     private lateinit var btnGpsOrigem: ImageButton
     private lateinit var btnGpsDestino: ImageButton
@@ -205,6 +212,95 @@ class MainActivity : AppCompatActivity() {
             e.printStackTrace()
             null
         }
+    }
+
+    private fun mostrarDialogoRapidoCombustivel() {
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.layout_dialog_despesa, null)
+        dialog.setContentView(view)
+
+        val txtTitulo = view.findViewById<TextView>(R.id.txtTituloDespesa)
+        val spinner = view.findViewById<Spinner>(R.id.spinnerCategoria)
+        val inputValor = view.findViewById<EditText>(R.id.inputValorDespesa)
+        val btnConfirmar = view.findViewById<Button>(R.id.btnConfirmarDespesa)
+        val btnCancelar = view.findViewById<Button>(R.id.btnCancelarDespesa)
+
+        // Ajustes para o modo Combustível Rápido
+        txtTitulo.text = "REGISTRAR ABASTECIMENTO"
+        view.findViewById<View>(R.id.containerSpinnerCategoria)?.visibility = View.GONE
+        view.findViewById<TextView>(R.id.txtLabelCategoria)?.visibility = View.GONE
+        view.findViewById<TextView>(R.id.txtLabelValor)?.text = "Quanto você abasteceu? (R$)"
+        btnConfirmar.text = "SALVAR COMBUSTÍVEL"
+        btnConfirmar.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FF5722"))
+
+        // Máscara de moeda reaproveitada
+        inputValor.inputType = InputType.TYPE_CLASS_NUMBER
+        inputValor.keyListener = DigitsKeyListener.getInstance("0123456789,")
+
+        inputValor.addTextChangedListener(object : TextWatcher {
+            private var isUpdating = false
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (isUpdating) return
+                isUpdating = true
+                val str = s.toString().replace("""[^0-9]""".toRegex(), "")
+                if (str.isNotEmpty()) {
+                    try {
+                        val doubleValue = str.toDouble() / 100.0
+                        val formatted = String.format(Locale("pt", "BR"), "%,.2f", doubleValue)
+                        s?.replace(0, s.length, formatted)
+                        inputValor.setSelection(inputValor.text.length)
+                    } catch (e: Exception) { }
+                } else { s?.clear() }
+                isUpdating = false
+            }
+        })
+
+        btnConfirmar.setOnClickListener {
+            val valorNovoTexto = inputValor.text.toString()
+            if (valorNovoTexto.isNotEmpty()) {
+                val prefs = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
+                
+                // 1. Pega o valor que já estava salvo
+                val valorAntigoTexto = prefs.getString("veiculo_gasto_combustivel", "0,00") ?: "0,00"
+                
+                // 2. Converte ambos para Double (limpando a máscara)
+                val valorAntigo = valorAntigoTexto.replace(".", "").replace(",", ".").toDoubleOrNull() ?: 0.0
+                val valorNovo = valorNovoTexto.replace(".", "").replace(",", ".").toDoubleOrNull() ?: 0.0
+                
+                // 3. Soma os valores
+                val totalSoma = valorAntigo + valorNovo
+                
+                // 4. Formata de volta para a máscara 0,00
+                val totalMascarado = String.format(Locale("pt", "BR"), "%,.2f", totalSoma)
+                
+                prefs.edit().putString("veiculo_gasto_combustivel", totalMascarado).apply()
+
+                // Salva também no histórico datado para o Histórico de Consumo
+                val currentUser = auth.currentUser
+                val fuelKey = if (currentUser != null) "historico_combustivel_local_${currentUser.uid}" else "historico_combustivel_geral"
+                val prefsApp = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+                val historicoComb = prefsApp.getString(fuelKey, "[]")
+                val arrayFuel = JSONArray(historicoComb)
+                val dataAtual = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
+                val objFuel = JSONObject().apply {
+                    put("data", dataAtual)
+                    put("valor", valorNovo)
+                }
+                arrayFuel.put(objFuel)
+                prefsApp.edit().putString(fuelKey, arrayFuel.toString()).apply()
+
+                atualizarDashboard()
+                dialog.dismiss()
+                Toast.makeText(this, "Abastecimento somado ao total!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Informe o valor!", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnCancelar.setOnClickListener { dialog.dismiss() }
+        dialog.show()
     }
 
     private fun mostrarDialogoValorDespesa(path: String) {
@@ -329,6 +425,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val themePrefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val savedTheme = themePrefs.getInt("tema_preferido", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+        AppCompatDelegate.setDefaultNightMode(savedTheme)
+
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         
@@ -361,6 +461,7 @@ class MainActivity : AppCompatActivity() {
         btnFotoDespesa = findViewById(R.id.btnFotoDespesa)
         btnReset = findViewById(R.id.btnReset)
         btnConfiguracoes = findViewById(R.id.btnConfiguracoes)
+        btnTrocarTema = findViewById(R.id.btnTrocarTema)
         radioGroupVeiculo = findViewById(R.id.radioGroupVeiculo)
         containerViagens = findViewById(R.id.containerViagens)
         txtOlaUsuario = findViewById(R.id.txtOlaUsuario)
@@ -369,7 +470,12 @@ class MainActivity : AppCompatActivity() {
         
         txtDashKmTotal = findViewById(R.id.txtDashKmTotal)
         txtDashCustoTotal = findViewById(R.id.txtDashCustoTotal)
-        txtDashRecibosTotal = findViewById(R.id.txtDashRecibosTotal)
+        txtDashGastoCombustivel = findViewById(R.id.txtDashGastoCombustivel)
+        txtDashFaltaOleo = findViewById(R.id.txtDashFaltaOleo)
+        
+        txtCountIda = findViewById(R.id.txtCountIda)
+        txtCountVolta = findViewById(R.id.txtCountVolta)
+        txtCountDespesa = findViewById(R.id.txtCountDespesa)
         
         btnGpsOrigem = findViewById(R.id.btnGpsOrigem)
         btnGpsDestino = findViewById(R.id.btnGpsDestino)
@@ -403,6 +509,32 @@ class MainActivity : AppCompatActivity() {
         setupRowFocus(R.id.row_origem, editOrigem)
         setupRowFocus(R.id.row_destino, editDestino)
         setupRowFocus(R.id.row_obs, editObservacoes)
+        
+        findViewById<View>(R.id.row_gasto_combustivel).setOnClickListener {
+            mostrarDialogoRapidoCombustivel()
+        }
+
+        findViewById<View>(R.id.btnClearDash).setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Zerar Resumo?")
+                .setMessage("Isso apagará o valor de combustível e também o total de KM rodados no mês. Deseja continuar?")
+                .setPositiveButton("Zerar Tudo") { _, _ ->
+                    // 1. Limpa combustível
+                    val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
+                    prefsVeiculo.edit().remove("veiculo_gasto_combustivel").apply()
+                    
+                    // 2. Limpa histórico local (que gera o KM do dashboard)
+                    val prefsApp = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+                    val currentUser = auth.currentUser
+                    val historicoKey = if (currentUser != null) "historico_local_${currentUser.uid}" else "historico_geral_local"
+                    prefsApp.edit().remove(historicoKey).apply()
+
+                    atualizarDashboard()
+                    Toast.makeText(this, "Resumo mensal zerado!", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("Cancelar", null)
+                .show()
+        }
 
         // --- PERSISTÊNCIA E HISTÓRICO ---
         val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
@@ -856,6 +988,16 @@ class MainActivity : AppCompatActivity() {
             mostrarMenuConfiguracoes(it)
         }
 
+        btnTrocarTema.setOnClickListener {
+            val isDark = AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES
+            val newMode = if (isDark) AppCompatDelegate.MODE_NIGHT_NO else AppCompatDelegate.MODE_NIGHT_YES
+            
+            AppCompatDelegate.setDefaultNightMode(newMode)
+            getSharedPreferences("DadosApp", Context.MODE_PRIVATE).edit {
+                putInt("tema_preferido", newMode)
+            }
+        }
+
         btnReset.setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("Limpar tudo / Novo Dia?")
@@ -1037,12 +1179,12 @@ class MainActivity : AppCompatActivity() {
             val text2 = view.findViewById<TextView>(android.R.id.text2)
             
             text1.text = String.format(Locale.forLanguageTag("pt-BR"), "%s > %s (%s)", viagem.origem, viagem.destino, viagem.data)
-            text1.setTextColor(Color.WHITE)
+            text1.setTextColor(ContextCompat.getColor(this, R.color.text_main))
             
             val kmTotal = viagem.kmFin - viagem.kmIni
             text2.text = String.format(Locale.forLanguageTag("pt-BR"), "Condutor: %s | KM: %d (I: %d F: %d) | R$ %.2f", 
                 viagem.condutor, kmTotal, viagem.kmIni, viagem.kmFin, viagem.custo)
-            text2.setTextColor(Color.LTGRAY)
+            text2.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
             
             view.setPadding(0, 20, 0, 20)
             
@@ -1067,23 +1209,96 @@ class MainActivity : AppCompatActivity() {
         atualizarDashboard()
     }
 
+    override fun onResume() {
+        super.onResume()
+        atualizarDashboard()
+    }
+
     private fun atualizarDashboard() {
         var totalKm = 0
-        var totalCusto = 0.0
         
-        listaDeViagens.forEach { v ->
-            totalKm += (v.kmFin - v.kmIni)
-            totalCusto += v.custo
-        }
-        
-        // Adiciona despesas de alimentação ao custo total
-        listaDadosDespesas.forEach { d ->
-            totalCusto += d.valor
-        }
+        val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val currentUser = auth.currentUser
+        val historicoKey = if (currentUser != null) "historico_local_${currentUser.uid}" else "historico_geral_local"
+        val historicoJson = prefs.getString(historicoKey, "[]")
+        val currentMonthYear = SimpleDateFormat("MM/yyyy", Locale.getDefault()).format(Date())
+
+        // Dados do Veículo (Dashboard)
+        val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
+        var kmAtualOdometer = prefsVeiculo.getString("veiculo_km_ini", "0")?.toIntOrNull() ?: 0
+
+        try {
+            val array = JSONArray(historicoJson)
+            val viagensPorData = mutableMapOf<String, MutableList<JSONObject>>()
+            
+            // 1. Processa TODO o histórico para encontrar o hodômetro máximo
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val data = obj.getString("data")
+                val kmf = obj.getInt("kmFin")
+
+                // Atualiza o hodômetro global (para o óleo)
+                if (kmf > kmAtualOdometer) kmAtualOdometer = kmf
+
+                // Agrupa para o resumo mensal (apenas mês atual)
+                if (data.endsWith(currentMonthYear)) {
+                    if (!viagensPorData.containsKey(data)) viagensPorData[data] = mutableListOf()
+                    viagensPorData[data]?.add(obj)
+                }
+            }
+            
+            // 2. Calcula KM total do mês atual usando span diário (Inclui Urbano)
+            viagensPorData.forEach { (_, lista) ->
+                val kmiPrimeiro = lista.minOf { it.getInt("kmIni") }
+                val kmfUltimo = lista.maxOf { it.getInt("kmFin") }
+                totalKm += (kmfUltimo - kmiPrimeiro)
+            }
+            
+        } catch (e: Exception) { e.printStackTrace() }
         
         txtDashKmTotal.text = totalKm.toString()
-        txtDashCustoTotal.text = String.format(Locale.forLanguageTag("pt-BR"), "R$ %.2f", totalCusto)
-        txtDashRecibosTotal.text = listaFotosDespesas.size.toString()
+        txtDashCustoTotal.text = String.format(Locale.forLanguageTag("pt-BR"), "R$ %.2f", totalKm * 1.20)
+
+        val gastoComb = prefsVeiculo.getString("veiculo_gasto_combustivel", "0,00")
+        val kmTrocaOleo = prefsVeiculo.getString("veiculo_oleo", "0")?.toIntOrNull() ?: 0
+
+        txtDashGastoCombustivel.text = if (gastoComb.isNullOrEmpty()) "R$ 0,00" else "R$ $gastoComb"
+        
+        // Cálculo do óleo: Diferença entre a meta e o KM mais alto registrado
+        val faltaOleo = kmTrocaOleo - kmAtualOdometer
+        txtDashFaltaOleo.text = if (faltaOleo > 0) "$faltaOleo KM" else "TROCAR!"
+        
+        // Cores de alerta
+        if (faltaOleo <= 500) txtDashFaltaOleo.setTextColor(Color.RED) 
+        else txtDashFaltaOleo.setTextColor(ContextCompat.getColor(this, R.color.accent_purple))
+
+        // --- ATUALIZAÇÃO DOS CONTADORES DE FOTOS ---
+        txtCountIda.apply {
+            if (fotoIdaPath != null) {
+                text = "(1)"
+                visibility = View.VISIBLE
+            } else {
+                visibility = View.GONE
+            }
+        }
+
+        txtCountVolta.apply {
+            if (fotoVoltaPath != null) {
+                text = "(1)"
+                visibility = View.VISIBLE
+            } else {
+                visibility = View.GONE
+            }
+        }
+
+        txtCountDespesa.apply {
+            if (listaFotosDespesas.isNotEmpty()) {
+                text = "(${listaFotosDespesas.size})"
+                visibility = View.VISIBLE
+            } else {
+                visibility = View.GONE
+            }
+        }
     }
 
     private fun salvarEstado() {
@@ -1165,19 +1380,27 @@ class MainActivity : AppCompatActivity() {
 
     private fun mostrarMenuConfiguracoes(view: View) {
         val popup = PopupMenu(this, view)
+        popup.menu.add("Informações do Veículo")
         popup.menu.add("Criar Usuário")
         popup.menu.add("Histórico de Viagens")
+        popup.menu.add("Histórico de Consumo")
         popup.menu.add("Sincronizar Dados")
         popup.menu.add("Exportar dados para PDF")
         popup.menu.add("Sair da Conta")
 
         popup.setOnMenuItemClickListener { item ->
             when (item.title) {
+                "Informações do Veículo" -> {
+                    startActivity(Intent(this, VeiculoActivity::class.java))
+                }
                 "Criar Usuário" -> {
                     startActivity(Intent(this, CadastroActivity::class.java))
                 }
                 "Histórico de Viagens" -> {
                     startActivity(Intent(this, HistoricoActivity::class.java))
+                }
+                "Histórico de Consumo" -> {
+                    startActivity(Intent(this, ConsumoActivity::class.java))
                 }
                 "Sincronizar Dados" -> {
                     sincronizarViagensComFirestore()
@@ -1189,14 +1412,7 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         Toast.makeText(this, "Buscando histórico na nuvem...", Toast.LENGTH_SHORT).show()
                         
-                        val nomeUsuarioLogado = editCondutor.text.toString().trim()
-                        val isAdmin = nomeUsuarioLogado.equals("Luiz Gustavo", ignoreCase = true)
-                        
-                        val query = if (isAdmin) {
-                            db.collection("viagens") // Admin vê tudo
-                        } else {
-                            db.collection("viagens").whereEqualTo("tecnicoId", currentUser.uid)
-                        }
+                        val query = db.collection("viagens").whereEqualTo("tecnicoId", currentUser.uid)
 
                         query.get()
                             .addOnSuccessListener { documents ->

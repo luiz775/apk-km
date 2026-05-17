@@ -1,14 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_main">#0A0A0F</color>
-    <color name="surface">#13131A</color>
-    <color name="surface2">#1C1C27</color>
-    <color name="text_main">#F0F0F5</color>
-    <color name="text_muted">#66F0F0F5</color>
-    <color name="accent_orange">#FF5C2B</color>
-    <color name="accent_blue">#3D7FFF</color>
-    <color name="accent_purple">#A259FF</color>
-    <color name="accent_green">#22C55E</color>
-    <color name="accent_gold">#F59E0B</color>
-    <color name="border_color">#14FFFFFF</color>
+    <!-- Adaptive Colors (Light) -->
+    <color name="bg_main">#FFFFFF</color>
+    <color name="surface">#F2F2F7</color>
+    <color name="surface2">#E5E5EA</color>
+    <color name="text_main">#000000</color>
+    <color name="text_muted">#3A3A3C</color>
+    <color name="text_hint">#8E8E93</color>
+    <color name="border_color">#C6C6C8</color>
+
+    <!-- Accents (High Contrast for Light) -->
+    <color name="accent_orange">#E64A19</color>
+    <color name="accent_blue">#0056D2</color>
+    <color name="accent_purple">#8944AB</color>
+    <color name="accent_green">#1B873F</color>
+    <color name="accent_gold">#A07800</color>
 </resources>

@@ -7,7 +7,7 @@
     android:layout_height="match_parent"
     android:fillViewport="true"
     android:isScrollContainer="true"
-    android:background="@drawable/bg_ambient">
+    android:background="@color/bg_main">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -22,6 +22,17 @@
             android:layout_marginTop="32dp"
             android:layout_marginBottom="24dp">
 
+            <ImageButton
+                android:id="@+id/btnTrocarTema"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:background="@drawable/bg_button_modern"
+                android:src="@android:drawable/ic_menu_compass"
+                android:contentDescription="Trocar Tema"
+                app:tint="@color/text_main" />
+
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -35,13 +46,9 @@
                     android:text="REGISTRO DE VIAGEM"
                     android:textSize="20sp"
                     android:textStyle="bold"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/text_main"
                     android:fontFamily="sans-serif-condensed-medium"
-                    android:letterSpacing="0.15"
-                    android:shadowColor="#4DFFFFFF"
-                    android:shadowDx="0"
-                    android:shadowDy="0"
-                    android:shadowRadius="10" />
+                    android:letterSpacing="0.15" />
 
                 <View
                     android:layout_width="80dp"
@@ -57,7 +64,6 @@
                     android:textColor="@color/accent_orange"
                     android:textSize="12sp"
                     android:textStyle="bold"
-                    android:alpha="0.9"
                     android:letterSpacing="0.05"
                     android:layout_marginTop="8dp" />
             </LinearLayout>
@@ -74,98 +80,155 @@
                 app:tint="@color/text_main" />
         </RelativeLayout>
 
-        <!-- DASHBOARD CARDS -->
+        <!-- DASHBOARD SECTION -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_modern"
+            android:padding="16dp"
             android:layout_marginBottom="28dp">
 
-            <!-- KM CARD -->
-            <LinearLayout
-                android:layout_width="0dp"
+            <RelativeLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:background="@drawable/bg_button_modern"
-                android:padding="12dp"
-                android:layout_marginEnd="6dp"
-                android:gravity="center">
+                android:layout_marginBottom="16dp">
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="🛣️ Total KM"
-                    android:textColor="@color/accent_blue"
-                    android:textSize="9sp"
+                    android:text="RESUMO MENSAL"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp"
                     android:textStyle="bold"
-                    android:alpha="0.8"/>
-                <TextView
-                    android:id="@+id/txtDashKmTotal"
-                    android:layout_width="wrap_content"
+                    android:letterSpacing="0.1"
+                    android:layout_centerVertical="true"/>
+
+                <ImageButton
+                    android:id="@+id/btnClearDash"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_alignParentEnd="true"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_menu_delete"
+                    app:tint="#EF4444"
+                    android:alpha="0.5"
+                    android:contentDescription="Limpar Dashboard" />
+            </RelativeLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <!-- KM TOTAL -->
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="0"
-                    android:textColor="#FFFFFF"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginTop="2dp"/>
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <TextView
+                        android:id="@+id/txtDashKmTotal"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textColor="@color/accent_blue"
+                        android:textSize="18sp"
+                        android:textStyle="bold"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="KM RODADOS"
+                        android:textColor="@color/text_muted"
+                        android:textSize="8sp"
+                        android:textStyle="bold"/>
+                </LinearLayout>
+
+                <View android:layout_width="1dp" android:layout_height="30dp" android:background="@color/border_color" android:layout_gravity="center_vertical"/>
+
+                <!-- GASTO GASOLINA -->
+                <LinearLayout
+                    android:id="@+id/row_gasto_combustivel"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <TextView
+                        android:id="@+id/txtDashGastoCombustivel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="R$ 0,00"
+                        android:textColor="@color/accent_orange"
+                        android:textSize="14sp"
+                        android:textStyle="bold"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="COMBUSTÍVEL"
+                        android:textColor="@color/text_muted"
+                        android:textSize="8sp"
+                        android:textStyle="bold"/>
+                </LinearLayout>
+
+                <View android:layout_width="1dp" android:layout_height="30dp" android:background="@color/border_color" android:layout_gravity="center_vertical"/>
+
+                <!-- TROCA DE ÓLEO -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <TextView
+                        android:id="@+id/txtDashFaltaOleo"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0 KM"
+                        android:textColor="@color/accent_purple"
+                        android:textSize="14sp"
+                        android:textStyle="bold"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="KM ÓLEO"
+                        android:textColor="@color/text_muted"
+                        android:textSize="8sp"
+                        android:textStyle="bold"/>
+                </LinearLayout>
             </LinearLayout>
 
-            <!-- CUSTO CARD -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/border_color"
+                android:layout_marginVertical="12dp"/>
+
             <LinearLayout
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:background="@drawable/bg_button_modern"
-                android:padding="12dp"
-                android:layout_marginHorizontal="3dp"
-                android:gravity="center">
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="💰 Custo Total"
-                    android:textColor="@color/accent_green"
-                    android:textSize="9sp"
-                    android:textStyle="bold"
-                    android:alpha="0.8"/>
+                    android:layout_weight="1"
+                    android:text="Total Reembolsável (Custo KM)"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp"/>
+
                 <TextView
                     android:id="@+id/txtDashCustoTotal"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="R$ 0,00"
-                    android:textColor="#FFFFFF"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:layout_marginTop="2dp"/>
-            </LinearLayout>
-
-            <!-- RECIBOS CARD -->
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:background="@drawable/bg_button_modern"
-                android:padding="12dp"
-                android:layout_marginStart="6dp"
-                android:gravity="center">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📄 Recibos"
-                    android:textColor="@color/accent_gold"
-                    android:textSize="9sp"
-                    android:textStyle="bold"
-                    android:alpha="0.8"/>
-                <TextView
-                    android:id="@+id/txtDashRecibosTotal"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="0"
-                    android:textColor="#FFFFFF"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginTop="2dp"/>
+                    android:textColor="@color/accent_green"
+                    android:textSize="16sp"
+                    android:textStyle="bold"/>
             </LinearLayout>
         </LinearLayout>
 
@@ -198,8 +261,7 @@
                 android:background="@drawable/bg_button_modern"
                 android:layout_marginEnd="5dp"
                 android:clickable="true"
-                android:focusable="true"
-                android:alpha="0.5">
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="44dp"
@@ -210,6 +272,15 @@
                     android:textSize="20sp"
                     android:layout_marginBottom="8dp" />
 
+                <TextView
+                    android:id="@+id/txtCountIda"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="(0)"
+                    android:textColor="@color/accent_orange"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -236,8 +307,7 @@
                 android:background="@drawable/bg_button_modern"
                 android:layout_marginStart="5dp"
                 android:clickable="true"
-                android:focusable="true"
-                android:alpha="0.5">
+                android:focusable="true">
 
                 <TextView
                     android:layout_width="44dp"
@@ -248,6 +318,15 @@
                     android:textSize="20sp"
                     android:layout_marginBottom="8dp" />
 
+                <TextView
+                    android:id="@+id/txtCountVolta"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="(0)"
+                    android:textColor="@color/accent_blue"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -275,8 +354,7 @@
             android:background="@drawable/bg_scan_modern"
             android:layout_marginBottom="20dp"
             android:clickable="true"
-            android:focusable="true"
-            android:alpha="0.5">
+            android:focusable="true">
 
             <TextView
                 android:layout_width="40dp"
@@ -293,10 +371,20 @@
                 android:orientation="vertical">
 
                 <TextView
+                    android:id="@+id/txtCountDespesa"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="(0)"
+                    android:textColor="@color/accent_purple"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    android:layout_marginBottom="2dp" />
+                <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Escanear Recibo"
-                    android:textColor="#E6A259FF"
+                    android:textColor="@color/accent_purple"
                     android:textSize="13sp"
                     android:textStyle="bold" />
                 <TextView
@@ -339,10 +427,10 @@
                 android:background="?attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📅" android:textSize="15sp" android:layout_marginEnd="12dp" android:alpha="0.5"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📅" android:textSize="15sp" android:layout_marginEnd="12dp" />
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="DATA" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
-                    <EditText android:id="@+id/editData" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="DD/MM/AAAA" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:inputType="phone"/>
+                    <EditText android:id="@+id/editData" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="DD/MM/AAAA" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="14sp" android:inputType="phone"/>
                 </LinearLayout>
             </LinearLayout>
             <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/border_color"/>
@@ -359,7 +447,7 @@
                 android:background="?attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="👤" android:textSize="15sp" android:layout_marginEnd="12dp" android:alpha="0.5"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="👤" android:textSize="15sp" android:layout_marginEnd="12dp" />
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MOTORISTA" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
                     <EditText android:id="@+id/editCondutor" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:text="Luiz Gustavo" android:textColor="@color/text_main" android:textSize="14sp"/>
@@ -381,10 +469,10 @@
                     android:background="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🕐" android:textSize="15sp" android:layout_marginEnd="10dp" android:alpha="0.5"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🕐" android:textSize="15sp" android:layout_marginEnd="10dp" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="SAÍDA" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
-                        <EditText android:id="@+id/editHoraSaida" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="00:00" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:inputType="time"/>
+                        <EditText android:id="@+id/editHoraSaida" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="00:00" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="14sp" android:inputType="time"/>
                     </LinearLayout>
                 </LinearLayout>
                 <View android:layout_width="1dp" android:layout_height="match_parent" android:background="@color/border_color"/>
@@ -400,10 +488,10 @@
                     android:background="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🕔" android:textSize="15sp" android:layout_marginEnd="10dp" android:alpha="0.5"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🕔" android:textSize="15sp" android:layout_marginEnd="10dp" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="CHEGADA" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
-                        <EditText android:id="@+id/editHoraChegada" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="00:00" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:inputType="time"/>
+                        <EditText android:id="@+id/editHoraChegada" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="00:00" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="14sp" android:inputType="time"/>
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
@@ -423,10 +511,10 @@
                     android:background="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🛣️" android:textSize="15sp" android:layout_marginEnd="10dp" android:alpha="0.5"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🛣️" android:textSize="15sp" android:layout_marginEnd="10dp" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="KM INICIAL" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
-                        <EditText android:id="@+id/editKmInicial" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="0" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:inputType="number"/>
+                        <EditText android:id="@+id/editKmInicial" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="0" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="14sp" android:inputType="number"/>
                     </LinearLayout>
                 </LinearLayout>
                 <View android:layout_width="1dp" android:layout_height="match_parent" android:background="@color/border_color"/>
@@ -442,10 +530,10 @@
                     android:background="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🏁" android:textSize="15sp" android:layout_marginEnd="10dp" android:alpha="0.5"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🏁" android:textSize="15sp" android:layout_marginEnd="10dp" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="KM FINAL" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
-                        <EditText android:id="@+id/editKmFinal" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="0" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:inputType="number"/>
+                        <EditText android:id="@+id/editKmFinal" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="0" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="14sp" android:inputType="number"/>
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
@@ -465,10 +553,10 @@
                     android:background="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📍" android:textSize="15sp" android:layout_marginEnd="10dp" android:alpha="0.5"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📍" android:textSize="15sp" android:layout_marginEnd="10dp" />
                     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ORIGEM" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
-                        <AutoCompleteTextView android:id="@+id/editOrigem" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Saída" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:completionThreshold="1"/>
+                        <AutoCompleteTextView android:id="@+id/editOrigem" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Saída" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="14sp" android:completionThreshold="1"/>
                     </LinearLayout>
                     <ImageButton
                         android:id="@+id/btnGpsOrigem"
@@ -493,10 +581,10 @@
                     android:background="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🎯" android:textSize="15sp" android:layout_marginEnd="10dp" android:alpha="0.5"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🎯" android:textSize="15sp" android:layout_marginEnd="10dp" />
                     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="DESTINO" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
-                        <AutoCompleteTextView android:id="@+id/editDestino" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Chegada" android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:completionThreshold="1"/>
+                        <AutoCompleteTextView android:id="@+id/editDestino" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Chegada" android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="14sp" android:completionThreshold="1"/>
                     </LinearLayout>
                     <ImageButton
                         android:id="@+id/btnGpsDestino"
@@ -522,10 +610,10 @@
                 android:background="?attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📝" android:textSize="15sp" android:layout_marginEnd="12dp" android:alpha="0.5"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📝" android:textSize="15sp" android:layout_marginEnd="12dp" />
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="OBSERVAÇÕES" android:textSize="9sp" android:textColor="@color/text_muted" android:textStyle="bold" android:letterSpacing="0.1"/>
-                    <EditText android:id="@+id/editObservacoes" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Detalhes adicionais..." android:textColor="@color/text_main" android:textColorHint="#40F0F0F5" android:textSize="14sp" android:minLines="2" android:gravity="top" android:inputType="textMultiLine"/>
+                    <EditText android:id="@+id/editObservacoes" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@null" android:hint="Detalhes adicionais..." android:textColor="@color/text_main" android:textColorHint="@color/text_hint" android:textSize="14sp" android:minLines="2" android:gravity="top" android:inputType="textMultiLine"/>
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>

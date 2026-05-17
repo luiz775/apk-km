@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive Colors (Dark) -->
+    <color name="bg_main">#0A0A0F</color>
+    <color name="surface">#13131A</color>
+    <color name="surface2">#1C1C27</color>
+    <color name="text_main">#F0F0F5</color>
+    <color name="text_muted">#8E8E93</color>
+    <color name="text_hint">#48484A</color>
+    <color name="border_color">#14FFFFFF</color>
+
+    <!-- Accents (Original Dark Mode colors) -->
+    <color name="accent_orange">#FF5C2B</color>
+    <color name="accent_blue">#3D7FFF</color>
+    <color name="accent_purple">#A259FF</color>
+    <color name="accent_green">#22C55E</color>
+    <color name="accent_gold">#F59E0B</color>
+</resources>
