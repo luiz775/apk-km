@@ -3,6 +3,7 @@ package com.luiz.controlekm
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -47,6 +48,9 @@ import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.RESULT_
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.SCANNER_MODE_FULL
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -126,6 +130,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtViagensCount: TextView
     private lateinit var mainScrollView: ScrollView
     
+    // Novas referências para feedback visual fotos
+    private lateinit var iconIda: TextView
+    private lateinit var iconVolta: TextView
+    private lateinit var subLblFotoIda: TextView
+    private lateinit var subLblFotoVolta: TextView
+    
     // Dashboard elements
     private lateinit var txtDashKmTotal: TextView
     private lateinit var txtDashCustoTotal: TextView
@@ -147,6 +157,7 @@ class MainActivity : AppCompatActivity() {
         .build()
 
     private val scanner = GmsDocumentScanning.getClient(scannerOptions)
+    private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
     private val scannerLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -367,10 +378,7 @@ class MainActivity : AppCompatActivity() {
             listaDadosDespesas.add(Despesa(path, categoria, valor))
             listaFotosDespesas.add(path)
             
-            btnFotoDespesa.apply {
-                alpha = 1.0f
-                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#9C27B0"))
-            }
+            btnFotoDespesa.alpha = 1.0f
             
             salvarEstado()
             validarBotoes()
@@ -397,22 +405,25 @@ class MainActivity : AppCompatActivity() {
                 
                 if (pedindoFotoDespesa) {
                     mostrarDialogoValorDespesa(path)
-                } else if (pedindoFotoIda) {
-                    fotoIdaPath = path
-                    fotoIdaHora = horaAtual
-                    btnFotoIda.apply {
-                        // text = "✅ FOTO IDA" // Removido pois agora é um ViewGroup
-                        alpha = 1.0f
-                        backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FF5722"))
-                    }
-                    btnFotoVolta.isEnabled = true
                 } else {
-                    fotoVoltaPath = path
-                    fotoVoltaHora = horaAtual
-                    btnFotoVolta.apply {
-                        // text = "✅ FOTO VOLTA" // Removido pois agora é um ViewGroup
-                        alpha = 1.0f
-                        backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#3D7FFF"))
+                    // Tenta ler o KM automaticamente via OCR
+                    processarOcrHodometro(uri, pedindoFotoIda)
+
+                    if (pedindoFotoIda) {
+                        fotoIdaPath = path
+                        fotoIdaHora = horaAtual
+                        btnFotoIda.alpha = 1.0f
+                        iconIda.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#4DFF5722"))
+                        subLblFotoIda.text = "Foto anexada ✅"
+                        subLblFotoIda.setTextColor(ContextCompat.getColor(this, R.color.accent_orange))
+                        btnFotoVolta.isEnabled = true
+                    } else {
+                        fotoVoltaPath = path
+                        fotoVoltaHora = horaAtual
+                        btnFotoVolta.alpha = 1.0f
+                        iconVolta.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#4D3D7FFF"))
+                        subLblFotoVolta.text = "Foto anexada ✅"
+                        subLblFotoVolta.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
                     }
                 }
                 salvarEstado()
@@ -483,6 +494,11 @@ class MainActivity : AppCompatActivity() {
         txtViagensCount = findViewById(R.id.txtViagensCount)
         mainScrollView = findViewById(R.id.mainScrollView)
         
+        iconIda = findViewById(R.id.iconIda)
+        iconVolta = findViewById(R.id.iconVolta)
+        subLblFotoIda = findViewById(R.id.subLblFotoIda)
+        subLblFotoVolta = findViewById(R.id.subLblFotoVolta)
+        
         txtDashKmTotal = findViewById(R.id.txtDashKmTotal)
         txtDashCustoTotal = findViewById(R.id.txtDashCustoTotal)
         txtDashGastoCombustivel = findViewById(R.id.txtDashGastoCombustivel)
@@ -514,6 +530,15 @@ class MainActivity : AppCompatActivity() {
                 scrollToView(row)
             }
         }
+
+        fun mostrarTimePicker(target: EditText) {
+            val cal = Calendar.getInstance()
+            val timeSetListener = TimePickerDialog.OnTimeSetListener { _, hour, minute ->
+                target.setText(String.format(Locale.getDefault(), "%02d:%02d", hour, minute))
+                salvarEstado()
+            }
+            TimePickerDialog(this, timeSetListener, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
+        }
         
         setupRowFocus(R.id.row_data, editData)
         setupRowFocus(R.id.row_condutor, editCondutor)
@@ -524,6 +549,9 @@ class MainActivity : AppCompatActivity() {
         setupRowFocus(R.id.row_origem, editOrigem)
         setupRowFocus(R.id.row_destino, editDestino)
         setupRowFocus(R.id.row_obs, editObservacoes)
+
+        editHoraSaida.setOnClickListener { mostrarTimePicker(editHoraSaida) }
+        editHoraChegada.setOnClickListener { mostrarTimePicker(editHoraChegada) }
         
         findViewById<View>(R.id.row_gasto_combustivel).setOnClickListener {
             mostrarDialogoRapidoCombustivel()
@@ -532,20 +560,47 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnClearDash).setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("Zerar Resumo?")
-                .setMessage("Isso apagará o valor de combustível e também o total de KM rodados no mês. Deseja continuar?")
+                .setMessage("Isso apagará o valor de combustível e também o total de KM rodados no mês de forma PERMANENTE (Celular e Nuvem). Deseja continuar?")
                 .setPositiveButton("Zerar Tudo") { _, _ ->
-                    // 1. Limpa combustível
+                    val currentUser = auth.currentUser
+                    
+                    // 1. Limpa combustível local
                     val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
                     prefsVeiculo.edit().remove("veiculo_gasto_combustivel").apply()
                     
-                    // 2. Limpa histórico local (que gera o KM do dashboard)
+                    // 2. Limpa histórico local
                     val prefsApp = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
-                    val currentUser = auth.currentUser
                     val historicoKey = if (currentUser != null) "historico_local_${currentUser.uid}" else "historico_geral_local"
-                    prefsApp.edit().remove(historicoKey).apply()
+                    val fuelKey = if (currentUser != null) "historico_combustivel_local_${currentUser.uid}" else "historico_combustivel_geral"
+                    prefsApp.edit().remove(historicoKey).remove(fuelKey).apply()
+
+                    // 3. Sincroniza a limpeza com a NUVEM (Firebase)
+                    if (currentUser != null) {
+                        // Zera combustível no doc do veículo
+                        db.collection("veiculos").document(currentUser.uid)
+                            .update("combustivel", "0,00")
+                        
+                        // Apaga registros de viagens na nuvem para este usuário
+                        db.collection("viagens")
+                            .whereEqualTo("tecnicoId", currentUser.uid)
+                            .get()
+                            .addOnSuccessListener { documents ->
+                                val batch = db.batch()
+                                for (doc in documents) batch.delete(doc.reference)
+                                
+                                // Apaga registros de combustível na nuvem
+                                db.collection("combustivel")
+                                    .whereEqualTo("tecnicoId", currentUser.uid)
+                                    .get()
+                                    .addOnSuccessListener { fuelDocs ->
+                                        for (fDoc in fuelDocs) batch.delete(fDoc.reference)
+                                        batch.commit()
+                                    }
+                            }
+                    }
 
                     atualizarDashboard()
-                    Toast.makeText(this, "Resumo mensal zerado!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Resumo mensal zerado definitivamente!", Toast.LENGTH_SHORT).show()
                 }
                 .setNegativeButton("Cancelar", null)
                 .show()
@@ -715,28 +770,25 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (listaFotosDespesas.isNotEmpty()) {
-            btnFotoDespesa.apply {
-                alpha = 1.0f
-                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#9C27B0"))
-            }
+            btnFotoDespesa.alpha = 1.0f
         } else {
             btnFotoDespesa.alpha = 0.5f
         }
         
         if (fotoIdaPath != null) {
-            btnFotoIda.apply {
-                alpha = 1.0f
-                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FF5722"))
-            }
+            btnFotoIda.alpha = 1.0f
+            iconIda.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#4DFF5722"))
+            subLblFotoIda.text = "Foto anexada ✅"
+            subLblFotoIda.setTextColor(ContextCompat.getColor(this, R.color.accent_orange))
             btnFotoVolta.isEnabled = true
         } else {
             btnFotoIda.alpha = 0.5f
         }
         if (fotoVoltaPath != null) {
-            btnFotoVolta.apply {
-                alpha = 1.0f
-                backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#3D7FFF"))
-            }
+            btnFotoVolta.alpha = 1.0f
+            iconVolta.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#4D3D7FFF"))
+            subLblFotoVolta.text = "Foto anexada ✅"
+            subLblFotoVolta.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
         } else {
             btnFotoVolta.alpha = 0.5f
         }
@@ -795,20 +847,6 @@ class MainActivity : AppCompatActivity() {
         editData.setOnClickListener {
             if (editData.text.isEmpty()) {
                 editData.setText(SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()))
-                salvarEstado()
-            }
-        }
-
-        editHoraSaida.setOnClickListener {
-            if (editHoraSaida.text.isEmpty()) {
-                editHoraSaida.setText(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()))
-                salvarEstado()
-            }
-        }
-
-        editHoraChegada.setOnClickListener {
-            if (editHoraChegada.text.isEmpty()) {
-                editHoraChegada.setText(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()))
                 salvarEstado()
             }
         }
@@ -953,21 +991,6 @@ class MainActivity : AppCompatActivity() {
 
             listaDeViagens.add(v)
             
-            // Salva no histórico permanente local
-            val currentUser = auth.currentUser
-            val historicoKey = if (currentUser != null) "historico_local_${currentUser.uid}" else "historico_geral_local"
-            val historicoGeral = prefs.getString(historicoKey, "[]")
-            val arrayHistorico = JSONArray(historicoGeral)
-            val obj = JSONObject().apply {
-                put("data", v.data); put("condutor", v.condutor); put("origem", v.origem); put("destino", v.destino)
-                put("hSaida", v.hSaida); put("hChegada", v.hChegada)
-                put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
-                put("observacoes", v.observacoes)
-                put("isEmpresa", v.isEmpresa)
-            }
-            arrayHistorico.put(obj)
-            prefs.edit().putString(historicoKey, arrayHistorico.toString()).apply()
-
             Toast.makeText(this, "Viagem adicionada!", Toast.LENGTH_SHORT).show()
 
             editOrigem.text.clear()
@@ -1056,16 +1079,19 @@ class MainActivity : AppCompatActivity() {
                     findViewById<RadioButton>(R.id.radioParticular).isChecked = true
                     
                     btnFotoIda.apply {
-                        // text = "📸 FOTO IDA"
                         alpha = 0.5f
-                        backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FF5722"))
                     }
+                    iconIda.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1AFFFFFF"))
+                    subLblFotoIda.text = "Toque para capturar"
+                    subLblFotoIda.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
+
                     btnFotoVolta.apply {
-                        // text = "📸 FOTO VOLTA"
                         alpha = 0.5f
-                        backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#607D8B"))
                         isEnabled = false
                     }
+                    iconVolta.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1AFFFFFF"))
+                    subLblFotoVolta.text = "Toque para capturar"
+                    subLblFotoVolta.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
                     btnFotoDespesa.apply {
                         // text = "📸 ADICIONAR DESPESAS (RECIBOS)"
                         alpha = 0.5f
@@ -1340,16 +1366,13 @@ class MainActivity : AppCompatActivity() {
             val array = JSONArray(historicoJson)
             val viagensPorData = mutableMapOf<String, MutableList<JSONObject>>()
             
-            // 1. Processa TODO o histórico para encontrar o hodômetro máximo
+            // 1. Processa o histórico
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
                 val data = obj.getString("data")
                 val kmf = obj.getInt("kmFin")
-
-                // Atualiza o hodômetro global (para o óleo) - SEMPRE atualiza
                 if (kmf > kmAtualOdometer) kmAtualOdometer = kmf
 
-                // Agrupa para o resumo mensal (apenas mês atual e SE NÃO for Empresa)
                 val isEmpresaViagem = if (obj.has("isEmpresa")) obj.getBoolean("isEmpresa") else false
                 if (data.endsWith(currentMonthYear) && !isEmpresaViagem) {
                     if (!viagensPorData.containsKey(data)) viagensPorData[data] = mutableListOf()
@@ -1357,7 +1380,21 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             
-            // 2. Calcula KM total do mês atual usando span diário (Inclui Urbano)
+            // 2. Adiciona as viagens que estão na lista da tela (evitando duplicar se já estiverem no histórico)
+            listaDeViagens.forEach { v ->
+                if (v.kmFin > kmAtualOdometer) kmAtualOdometer = v.kmFin
+                if (v.data.endsWith(currentMonthYear) && !v.isEmpresa) {
+                    // Verifica se essa viagem específica já não foi processada no histórico (pela data/km)
+                    // Para simplificar e garantir precisão, o span diário cuidará disso
+                    val obj = JSONObject().apply {
+                        put("kmIni", v.kmIni); put("kmFin", v.kmFin)
+                    }
+                    if (!viagensPorData.containsKey(v.data)) viagensPorData[v.data] = mutableListOf()
+                    viagensPorData[v.data]?.add(obj)
+                }
+            }
+
+            // 3. Calcula KM total do mês usando span diário (Inclui Urbano)
             viagensPorData.forEach { (_, lista) ->
                 val kmiPrimeiro = lista.minOf { it.getInt("kmIni") }
                 val kmfUltimo = lista.maxOf { it.getInt("kmFin") }
@@ -1365,26 +1402,6 @@ class MainActivity : AppCompatActivity() {
             }
             
         } catch (e: Exception) { e.printStackTrace() }
-
-        // 3. Inclui viagens que ainda estão na lista da tela (não geradas em PDF)
-        if (listaDeViagens.isNotEmpty()) {
-            val viagensPorDataLista = listaDeViagens.groupBy { it.data }
-            viagensPorDataLista.forEach { (data, lista) ->
-                if (data.endsWith(currentMonthYear)) {
-                    // Filtra para o Dashboard (não conta se for Empresa)
-                    val listaFiltrada = lista.filter { !it.isEmpresa }
-                    if (listaFiltrada.isNotEmpty()) {
-                        val kmi = listaFiltrada.minOf { it.kmIni }
-                        val kmf = listaFiltrada.maxOf { it.kmFin }
-                        totalKm += (kmf - kmi)
-                    }
-                    
-                    // Atualiza hodômetro para óleo (independente de ser Empresa ou não)
-                    val kmfMaxDia = lista.maxOf { it.kmFin }
-                    if (kmfMaxDia > kmAtualOdometer) kmAtualOdometer = kmfMaxDia
-                }
-            }
-        }
         
         txtDashKmTotal.text = totalKm.toString()
         txtDashCustoTotal.text = String.format(Locale.forLanguageTag("pt-BR"), "R$ %.2f", totalKm * 1.20)
@@ -1491,6 +1508,20 @@ class MainActivity : AppCompatActivity() {
         val ultimaViagem = listaDeViagens.lastOrNull { it.condutor.equals(condutorTxt, ignoreCase = true) }
         val erroKmHistorico = ultimaViagem != null && kmI < ultimaViagem.kmFin && editKmInicial.text.isNotEmpty()
 
+        // Aplicando Alertas Visuais
+        if (erroKmAtual) {
+            editKmFinal.error = "KM Final deve ser maior que o Inicial"
+        } else {
+            editKmFinal.error = null
+        }
+
+        if (erroKmHistorico) {
+            val kmUltimo = ultimaViagem?.kmFin ?: 0
+            editKmInicial.error = "KM Inicial não pode ser menor que o último registro ($kmUltimo)"
+        } else {
+            editKmInicial.error = null
+        }
+
         val temErro = erroKmAtual || erroKmHistorico
         val temFotoIda = fotoIdaPath != null
         val temOrigem = editOrigem.text.toString().trim().isNotEmpty()
@@ -1502,6 +1533,11 @@ class MainActivity : AppCompatActivity() {
         
         btnFotoDespesa.isEnabled = temFotoIda
         btnAdicionar.isEnabled = !temErro && temFotoIda && temOrigem && temDestino
+
+        // NOVA: Borda vermelha se tiver conteúdo (isSelected via XML Selector)
+        btnFotoIda.isSelected = fotoIdaPath != null
+        btnFotoVolta.isSelected = fotoVoltaPath != null
+        btnFotoDespesa.isSelected = listaFotosDespesas.isNotEmpty()
         
         val canGerar = listaDeViagens.isNotEmpty() && fotoVoltaPath != null && !temErro
         btnGerarPdf.isEnabled = canGerar
@@ -1516,9 +1552,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun mostrarMenuConfiguracoes(view: View) {
-        val popup = PopupMenu(this, view)
+        // Criar um wrapper com o tema personalizado para o menu
+        val wrapper = androidx.appcompat.view.ContextThemeWrapper(this, R.style.Theme_CustomPopupMenu)
+        val popup = PopupMenu(wrapper, view)
         popup.menu.add("Informações do Veículo")
-        popup.menu.add("Criar Usuário")
         popup.menu.add("Histórico de Viagens")
         popup.menu.add("Histórico de Consumo")
         popup.menu.add("Sincronizar Dados")
@@ -1529,9 +1566,6 @@ class MainActivity : AppCompatActivity() {
             when (item.title) {
                 "Informações do Veículo" -> {
                     startActivity(Intent(this, VeiculoActivity::class.java))
-                }
-                "Criar Usuário" -> {
-                    startActivity(Intent(this, CadastroActivity::class.java))
                 }
                 "Histórico de Viagens" -> {
                     startActivity(Intent(this, HistoricoActivity::class.java))
@@ -1734,12 +1768,17 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 runOnUiThread {
-                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
-                        .setTitle("Resposta do Script")
-                        .setMessage(inputContent)
-                        .setPositiveButton("OK", null)
-                        .show()
-
+                    // Verifica se a palavra "Sucesso" veio na resposta do Google
+                    if (inputContent.contains("Sucesso", ignoreCase = true) || inputContent.contains("OK", ignoreCase = true)) {
+                        Toast.makeText(this@MainActivity, "Sincronizado na nuvem com sucesso! ☁️", Toast.LENGTH_LONG).show()
+                    } else {
+                        // Só mostra o pop-up gigante se acontecer algum erro real
+                        androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                            .setTitle("Atenção na Sincronização")
+                            .setMessage("Retorno: $inputContent")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
                 }
                 conn.disconnect()
             } catch (e: Exception) {
@@ -1815,6 +1854,34 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
             null
+        }
+    }
+
+    private fun processarOcrHodometro(uri: Uri, isIda: Boolean) {
+        try {
+            val image = InputImage.fromFilePath(this, uri)
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    // Filtra apenas números com 3 ou mais dígitos (provável KM)
+                    val numerosEncontrados = visionText.textBlocks
+                        .flatMap { it.lines }
+                        .flatMap { it.elements }
+                        .map { it.text.replace(".", "").replace(",", "").replace(" ", "").trim() }
+                        .filter { it.length >= 3 && it.all { char -> char.isDigit() } }
+                    
+                    if (numerosEncontrados.isNotEmpty()) {
+                        // Pega o maior número encontrado (geralmente o KM total é o maior e mais isolado)
+                        val kmLido = numerosEncontrados.maxOf { it.toInt() }
+                        runOnUiThread {
+                            if (isIda) editKmInicial.setText(kmLido.toString())
+                            else editKmFinal.setText(kmLido.toString())
+                            Toast.makeText(this, "KM Identificado: $kmLido", Toast.LENGTH_SHORT).show()
+                            salvarEstado()
+                        }
+                    }
+                }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 

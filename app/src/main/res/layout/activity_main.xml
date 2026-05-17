@@ -75,7 +75,7 @@
                 android:layout_alignParentEnd="true"
                 android:layout_centerVertical="true"
                 android:background="@drawable/bg_button_modern"
-                android:src="@android:drawable/ic_menu_manage"
+                android:src="@drawable/ic_settings"
                 android:contentDescription="Configurações"
                 app:tint="@color/text_main" />
         </RelativeLayout>
@@ -264,9 +264,10 @@
                 android:focusable="true">
 
                 <TextView
+                    android:id="@+id/iconIda"
                     android:layout_width="44dp"
                     android:layout_height="44dp"
-                    android:background="#26FF5C2B"
+                    android:background="#1AFFFFFF"
                     android:gravity="center"
                     android:text="📸"
                     android:textSize="20sp"
@@ -276,19 +277,21 @@
                     android:id="@+id/txtCountIda"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="(0)"
+                    android:text="(1)"
                     android:textColor="@color/accent_orange"
                     android:textSize="9sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
                 <TextView
+                    android:id="@+id/lblFotoIda"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="FOTO IDA"
-                    android:textColor="@color/accent_orange"
+                    android:textColor="@color/text_main"
                     android:textSize="11sp"
                     android:textStyle="bold" />
                 <TextView
+                    android:id="@+id/subLblFotoIda"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Toque para capturar"
@@ -310,9 +313,10 @@
                 android:focusable="true">
 
                 <TextView
+                    android:id="@+id/iconVolta"
                     android:layout_width="44dp"
                     android:layout_height="44dp"
-                    android:background="#263D7FFF"
+                    android:background="#1AFFFFFF"
                     android:gravity="center"
                     android:text="📷"
                     android:textSize="20sp"
@@ -322,19 +326,21 @@
                     android:id="@+id/txtCountVolta"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="(0)"
+                    android:text="(1)"
                     android:textColor="@color/accent_blue"
                     android:textSize="9sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
                 <TextView
+                    android:id="@+id/lblFotoVolta"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="FOTO VOLTA"
-                    android:textColor="@color/accent_blue"
+                    android:textColor="@color/text_main"
                     android:textSize="11sp"
                     android:textStyle="bold" />
                 <TextView
+                    android:id="@+id/subLblFotoVolta"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Toque para capturar"

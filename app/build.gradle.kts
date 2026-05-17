@@ -39,6 +39,8 @@ android {
 }
 
 dependencies {
+
+
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.config.ktx)
     implementation(libs.firebase.firestore.ktx)
@@ -53,8 +55,11 @@ dependencies {
     implementation(libs.mlkit.text.recognition)
     implementation(libs.mlkit.document.scanner)
     implementation(libs.play.services.location)
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.0")
     implementation(libs.mpandroidchart)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+
 }
+
