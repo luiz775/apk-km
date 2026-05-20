@@ -15,6 +15,7 @@ playServicesLocation = "21.0.1"
 mpAndroidChart = "v3.1.0"
 firebaseBom = "32.7.2"
 googleServices = "4.4.1"
+crashlyticsPlugin = "3.0.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -34,8 +35,10 @@ firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.r
 firebase-config-ktx = { group = "com.google.firebase", name = "firebase-config-ktx" }
 firebase-firestore-ktx = { group = "com.google.firebase", name = "firebase-firestore-ktx" }
 firebase-auth-ktx = { group = "com.google.firebase", name = "firebase-auth-ktx" }
+firebase-crashlytics-ktx = { group = "com.google.firebase", name = "firebase-crashlytics-ktx" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
+firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "crashlyticsPlugin" }
 

@@ -1,16 +1,17 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 android {
     namespace = "com.luiz.controlekm"
-    compileSdk = 36 // Updated from compileSdk { version = release(36) { ... } } to a simpler version if possible, but keeping consistency
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.luiz.controlekm"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
@@ -19,7 +20,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -45,6 +47,7 @@ dependencies {
     implementation(libs.firebase.config.ktx)
     implementation(libs.firebase.firestore.ktx)
     implementation(libs.firebase.auth.ktx)
+    implementation(libs.firebase.crashlytics.ktx)
 
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)

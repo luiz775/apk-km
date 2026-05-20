@@ -3,6 +3,9 @@ package com.luiz.controlekm
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
@@ -11,6 +14,7 @@ import android.graphics.*
 import android.graphics.pdf.PdfDocument
 import android.location.Geocoder
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
@@ -25,12 +29,21 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import android.view.animation.AnimationUtils
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
-import androidx.core.graphics.scale
 import androidx.core.graphics.toColorInt
+import com.google.android.material.snackbar.Snackbar
+import android.view.ViewGroup
+import android.view.Gravity
+import android.view.LayoutInflater
 import com.canhub.cropper.CropImageContract
 import com.canhub.cropper.CropImageContractOptions
 import com.canhub.cropper.CropImageOptions
@@ -38,6 +51,7 @@ import com.canhub.cropper.CropImageView
 import com.google.android.gms.location.LocationServices
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.firebase.auth.ktx.auth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -57,8 +71,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
-import java.text.NumberFormat
+import java.net.UnknownHostException
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -149,6 +164,28 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnGpsOrigem: ImageButton
     private lateinit var btnGpsDestino: ImageButton
     private val fusedLocationClient by lazy { LocationServices.getFusedLocationProviderClient(this) }
+
+    private var isAppForeground = false
+
+    private val crashlytics by lazy { FirebaseCrashlytics.getInstance() }
+
+    private fun reportarErro(e: Exception, contexto: String) {
+        try {
+            crashlytics.log("Contexto Erro: $contexto")
+            crashlytics.recordException(e)
+            runOnUiThread {
+                Toast.makeText(this, "Erro: $contexto", Toast.LENGTH_SHORT).show()
+            }
+        } catch (ex: Exception) { e.printStackTrace() }
+    }
+
+    private val CHANNEL_ID = "sync_channel_controlekm"
+
+    private val requestNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(this, "Permissão de notificação negada. O feedback de sincronização será via alertas.", Toast.LENGTH_LONG).show()
+        }
+    }
 
     private val scannerOptions = GmsDocumentScannerOptions.Builder()
         .setResultFormats(RESULT_FORMAT_JPEG)
@@ -457,7 +494,13 @@ class MainActivity : AppCompatActivity() {
 
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        crashlytics.setUserId(auth.currentUser?.uid ?: "anonimo")
+        crashlytics.log("MainActivity Iniciada")
         
+        criarCanalNotificacao()
+        pedirPermissaoNotificacao()
+
         verificarBloqueio()
         
         // --- SISTEMA DE SEGURANÇA (ATIVAÇÃO) ---
@@ -564,43 +607,70 @@ class MainActivity : AppCompatActivity() {
                 .setPositiveButton("Zerar Tudo") { _, _ ->
                     val currentUser = auth.currentUser
                     
-                    // 1. Limpa combustível local
-                    val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
-                    prefsVeiculo.edit().remove("veiculo_gasto_combustivel").apply()
-                    
-                    // 2. Limpa histórico local
-                    val prefsApp = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
-                    val historicoKey = if (currentUser != null) "historico_local_${currentUser.uid}" else "historico_geral_local"
-                    val fuelKey = if (currentUser != null) "historico_combustivel_local_${currentUser.uid}" else "historico_combustivel_geral"
-                    prefsApp.edit().remove(historicoKey).remove(fuelKey).apply()
+                    // Mostra um progresso para evitar fechar o app antes de terminar
+                    val progressDialog = AlertDialog.Builder(this)
+                        .setTitle("Limpando Dados...")
+                        .setMessage("Sincronizando com a nuvem, por favor aguarde.")
+                        .setCancelable(false)
+                        .show()
 
-                    // 3. Sincroniza a limpeza com a NUVEM (Firebase)
-                    if (currentUser != null) {
-                        // Zera combustível no doc do veículo
-                        db.collection("veiculos").document(currentUser.uid)
-                            .update("combustivel", "0,00")
+            // 2. Limpa localmente
+            try {
+                val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
+                prefsVeiculo.edit().remove("veiculo_gasto_combustivel").apply()
+                
+                val prefsApp = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+                val historicoKey = if (currentUser != null) "historico_local_${currentUser.uid}" else "historico_geral_local"
+                val fuelKey = if (currentUser != null) "historico_combustivel_local_${currentUser.uid}" else "historico_combustivel_geral"
+                prefsApp.edit().remove(historicoKey).remove(fuelKey).apply()
+            } catch (e: Exception) { reportarErro(e, "Reset Local Dashboard") }
+
+            // 2. Limpa na Nuvem (Firebase)
+            if (currentUser != null) {
+                val batch = db.batch()
+                
+                // Zera combustível no doc do veículo
+                val vehicleRef = db.collection("veiculos").document(currentUser.uid)
+                batch.update(vehicleRef, "combustivel", "0,00")
+                
+                // Busca e deleta viagens
+                db.collection("viagens")
+                    .whereEqualTo("tecnicoId", currentUser.uid)
+                    .get()
+                    .addOnSuccessListener { voyages ->
+                        for (doc in voyages) batch.delete(doc.reference)
                         
-                        // Apaga registros de viagens na nuvem para este usuário
-                        db.collection("viagens")
+                        // Busca e deleta combustivel
+                        db.collection("combustivel")
                             .whereEqualTo("tecnicoId", currentUser.uid)
                             .get()
-                            .addOnSuccessListener { documents ->
-                                val batch = db.batch()
-                                for (doc in documents) batch.delete(doc.reference)
+                            .addOnSuccessListener { fuels ->
+                                for (fDoc in fuels) batch.delete(fDoc.reference)
                                 
-                                // Apaga registros de combustível na nuvem
-                                db.collection("combustivel")
-                                    .whereEqualTo("tecnicoId", currentUser.uid)
-                                    .get()
-                                    .addOnSuccessListener { fuelDocs ->
-                                        for (fDoc in fuelDocs) batch.delete(fDoc.reference)
-                                        batch.commit()
+                                // Executa a limpeza pesada
+                                batch.commit().addOnCompleteListener { task ->
+                                    progressDialog.dismiss()
+                                    if (task.isSuccessful) {
+                                        atualizarDashboard()
+                                        Toast.makeText(this, "Resumo mensal zerado definitivamente!", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(this, "Erro ao limpar nuvem. Verifique sua internet.", Toast.LENGTH_LONG).show()
                                     }
+                                }
+                            }
+                            .addOnFailureListener {
+                                progressDialog.dismiss()
+                                reportarErro(it as Exception, "Erro deletar combustivel nuvem")
                             }
                     }
-
-                    atualizarDashboard()
-                    Toast.makeText(this, "Resumo mensal zerado definitivamente!", Toast.LENGTH_SHORT).show()
+                    .addOnFailureListener {
+                        progressDialog.dismiss()
+                        reportarErro(it as Exception, "Erro buscar viagens nuvem")
+                    }
+            } else {
+                        progressDialog.dismiss()
+                        atualizarDashboard()
+                    }
                 }
                 .setNegativeButton("Cancelar", null)
                 .show()
@@ -668,6 +738,7 @@ class MainActivity : AppCompatActivity() {
                         val nomeTecnico = document.getString("nome") ?: "Usuário"
                         editCondutor.setText(nomeTecnico)
                         txtOlaUsuario.text = "Olá, $nomeTecnico"
+                        crashlytics.setCustomKey("nome_tecnico", nomeTecnico)
 
 // NOVO: Verifica se mudou de usuário e limpa os dados se sim
                         val condutorSalvo = prefs.getString("rascunho_condutor", "")
@@ -809,7 +880,10 @@ class MainActivity : AppCompatActivity() {
                         if (obj.has("isEmpresa")) obj.getBoolean("isEmpresa") else false
                     ))
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { 
+                reportarErro(e, "Carregamento de Viagens")
+                prefs.edit().remove("lista_viagens").apply()
+            }
             atualizarListaVisual()
         }
 
@@ -932,6 +1006,32 @@ class MainActivity : AppCompatActivity() {
             val kmITxt = editKmInicial.text.toString().trim()
             val kmFTxt = editKmFinal.text.toString().trim()
 
+            // Validação de Tamanho
+            if (origemTxt.length > 100 || destinoTxt.length > 100) {
+                Toast.makeText(this, "Origem/Destino muito longos (máx 100)", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (editObservacoes.text.length > 500) {
+                Toast.makeText(this, "Observações muito longas (máx 500)", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            // Validação de Data
+            try {
+                val partes = dataTxt.split("/")
+                if (partes.size == 3) {
+                    val dia = partes[0].toInt()
+                    val mes = partes[1].toInt()
+                    if (dia > 31 || mes > 12) {
+                        editData.error = "Data inválida"
+                        return@setOnClickListener
+                    }
+                }
+            } catch (e: Exception) { 
+                editData.error = "Formato inválido"
+                return@setOnClickListener 
+            }
+
             // Verificação de campos obrigatórios
             val camposFaltando = mutableListOf<String>()
             if (dataTxt.isEmpty()) camposFaltando.add("Data")
@@ -1053,6 +1153,8 @@ class MainActivity : AppCompatActivity() {
                 .setTitle("Limpar tudo / Novo Dia?")
                 .setMessage("Isso apagará as fotos e todos os registros da lista para iniciar um novo dia.")
                 .setPositiveButton("Sim, Limpar") { _, _ ->
+                    salvarCopiaUltimoLote() // SALVA ANTES DE LIMPAR
+
                     fotoIdaPath?.let { File(it).delete() }
                     fotoVoltaPath?.let { File(it).delete() }
                     
@@ -1111,6 +1213,11 @@ class MainActivity : AppCompatActivity() {
         validarBotoes() // Chama no início
         atualizarDashboard()
         sincronizarDadosUsuario()
+
+        // Verifica se abriu através de uma notificação de erro para tentar reenviar
+        if (intent.getBooleanExtra("RETRY_SYNC", false)) {
+            reenviarUltimoLote()
+        }
     }
 
     private fun sincronizarDadosUsuario() {
@@ -1138,8 +1245,8 @@ class MainActivity : AppCompatActivity() {
         // 2. Sincroniza Histórico de Viagens (para o Dashboard Mensal)
         db.collection("viagens").whereEqualTo("tecnicoId", currentUser.uid).get()
             .addOnSuccessListener { documents ->
+                val array = JSONArray()
                 if (!documents.isEmpty) {
-                    val array = JSONArray()
                     for (doc in documents) {
                         val obj = JSONObject().apply {
                             put("data", doc.getString("data"))
@@ -1156,17 +1263,18 @@ class MainActivity : AppCompatActivity() {
                         }
                         array.put(obj)
                     }
-                    val prefsA = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
-                    prefsA.edit().putString("historico_local_${currentUser.uid}", array.toString()).apply()
-                    atualizarDashboard()
                 }
+                // Sempre atualiza (se estiver vazio na nuvem, limpa o local para sincronizar o reset)
+                val prefsA = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+                prefsA.edit().putString("historico_local_${currentUser.uid}", array.toString()).apply()
+                atualizarDashboard()
             }
 
         // 3. Sincroniza Histórico de Combustível
         db.collection("combustivel").whereEqualTo("tecnicoId", currentUser.uid).get()
             .addOnSuccessListener { documents ->
+                val arrayFuel = JSONArray()
                 if (!documents.isEmpty) {
-                    val arrayFuel = JSONArray()
                     for (doc in documents) {
                         val obj = JSONObject().apply {
                             put("data", doc.getString("data"))
@@ -1174,10 +1282,11 @@ class MainActivity : AppCompatActivity() {
                         }
                         arrayFuel.put(obj)
                     }
-                    val prefsA = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
-                    prefsA.edit().putString("historico_combustivel_local_${currentUser.uid}", arrayFuel.toString()).apply()
-                    atualizarDashboard()
                 }
+                // Sempre atualiza
+                val prefsA = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+                prefsA.edit().putString("historico_combustivel_local_${currentUser.uid}", arrayFuel.toString()).apply()
+                atualizarDashboard()
             }
     }
 
@@ -1336,6 +1445,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        isAppForeground = true
         
         // Atualiza o KM Inicial se estiver vazio (ex: após configurar o veículo ou limpar dados)
         if (editKmInicial.text.isNullOrEmpty()) {
@@ -1347,6 +1457,70 @@ class MainActivity : AppCompatActivity() {
         }
 
         atualizarDashboard()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        isAppForeground = false
+    }
+
+    private fun mostrarToastCustom(titulo: String, subtitulo: String, tipo: String) {
+        if (!isAppForeground) return
+
+        val snackbar = Snackbar.make(findViewById(android.R.id.content), "", 4000)
+        val customView = layoutInflater.inflate(R.layout.layout_toast_custom, null)
+        
+        val snackbarLayout = snackbar.view as Snackbar.SnackbarLayout
+        snackbarLayout.setBackgroundColor(Color.TRANSPARENT)
+        snackbarLayout.setPadding(0, 0, 0, 0)
+        
+        val container = customView.findViewById<LinearLayout>(R.id.toast_container)
+        val icon = customView.findViewById<TextView>(R.id.toast_icon)
+        val txtTitle = customView.findViewById<TextView>(R.id.toast_title)
+        val txtSubtitle = customView.findViewById<TextView>(R.id.toast_subtitle)
+
+        txtTitle.text = titulo
+        txtSubtitle.text = subtitulo
+
+        when (tipo.lowercase()) {
+            "sucesso" -> {
+                icon.text = "✅"
+                txtTitle.setTextColor(Color.parseColor("#1B5E20"))
+            }
+            "erro" -> {
+                icon.text = "❌"
+                txtTitle.setTextColor(Color.parseColor("#B71C1C"))
+            }
+            "info" -> {
+                icon.text = "ℹ️"
+                txtTitle.setTextColor(Color.parseColor("#0D47A1"))
+            }
+        }
+
+        snackbarLayout.addView(customView, 0)
+
+        // Posicionar no topo respeitando a status bar
+        val params = snackbarLayout.layoutParams as FrameLayout.LayoutParams
+        params.gravity = Gravity.TOP
+        
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        val statusBarHeight = if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
+        params.topMargin = statusBarHeight + (16 * resources.displayMetrics.density).toInt()
+        
+        snackbarLayout.layoutParams = params
+
+        // Animações customizadas
+        customView.startAnimation(AnimationUtils.loadAnimation(this, R.anim.toast_slide_down_in))
+        
+        snackbar.addCallback(object : Snackbar.Callback() {
+            override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                // Animação de saída antes de remover (opcional, Snackbar tem a própria)
+            }
+        })
+
+        customView.setOnClickListener { snackbar.dismiss() }
+        
+        snackbar.show()
     }
 
     private fun atualizarDashboard() {
@@ -1559,6 +1733,8 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add("Histórico de Viagens")
         popup.menu.add("Histórico de Consumo")
         popup.menu.add("Sincronizar Dados")
+        popup.menu.add("Reenviar Último Lote")
+        popup.menu.add("Ver Histórico de Sincronizações")
         popup.menu.add("Exportar dados para PDF")
         popup.menu.add("Sair da Conta")
 
@@ -1575,6 +1751,12 @@ class MainActivity : AppCompatActivity() {
                 }
                 "Sincronizar Dados" -> {
                     sincronizarViagensComFirestore()
+                }
+                "Reenviar Último Lote" -> {
+                    reenviarUltimoLote()
+                }
+                "Ver Histórico de Sincronizações" -> {
+                    mostrarHistoricoLogs()
                 }
                 "Exportar dados para PDF" -> {
                     val currentUser = auth.currentUser
@@ -1670,7 +1852,13 @@ class MainActivity : AppCompatActivity() {
         // CORREÇÃO: Criamos uma CÓPIA da lista (.toList()) para o envio
         val copiaParaEnvio = listaDeViagens.toList()
         val copiaDespesas = listaDadosDespesas.toList()
-        salvarNaPlanilhaGoogle(copiaParaEnvio, copiaDespesas)
+        
+        // LOG INICIAL (PENDENTE)
+        val condutor = if (copiaParaEnvio.isNotEmpty()) copiaParaEnvio[0].condutor.take(4).uppercase().replace(" ", "") else "USER"
+        val loteId = "${condutor}_${System.currentTimeMillis()}"
+        salvarLog("Pendente", "Iniciando sincronização...", copiaParaEnvio.size, loteId)
+        
+        salvarNaPlanilhaGoogle(copiaParaEnvio, copiaDespesas, loteId)
 
         // Envia para o Firestore individualmente
         var sucessoCount = 0
@@ -1702,89 +1890,158 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun salvarNaPlanilhaGoogle(viagens: List<Viagem>, despesas: List<Despesa> = emptyList()) {
+    private fun salvarNaPlanilhaGoogle(viagens: List<Viagem>, despesas: List<Despesa> = emptyList(), loteIdExterno: String? = null) {
         val scriptUrl = "https://script.google.com/macros/s/AKfycbz-vPT7DHjux2zBzc2PAo6a3O99rb4aE70xjdWVtcnNIbR00S1045Fa15lwe-J58Yhs/exec"
         
         if (scriptUrl.isEmpty() || scriptUrl.contains("SUA_URL")) return
 
+        runOnUiThread { Toast.makeText(this, "📤 Enviando para a nuvem em segundo plano...", Toast.LENGTH_SHORT).show() }
+
         Thread {
-            try {
-                val url = URL(scriptUrl)
-                val conn = url.openConnection() as HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.doOutput = true
-                conn.instanceFollowRedirects = true
-                conn.setRequestProperty("Content-Type", "application/json")
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+            var sucesso = false
+            var tentativa = 1
+            val maxTentativas = 3
+            val delays = listOf(3000L, 7000L, 15000L)
+            
+            val loteId = loteIdExterno ?: if (viagens.isNotEmpty()) {
+                val condutor = viagens[0].condutor.take(4).uppercase().replace(" ", "")
+                "${condutor}_${System.currentTimeMillis()}"
+            } else System.currentTimeMillis().toString()
 
-                // Geramos um ID único baseado no UID do técnico e timestamp para evitar sobreposição
-                val loteId = if (viagens.isNotEmpty()) {
-                    val condutor = viagens[0].condutor.take(4).uppercase().replace(" ", "")
-                    "${condutor}_${System.currentTimeMillis()}"
-                } else System.currentTimeMillis().toString()
+            while (tentativa <= maxTentativas && !sucesso) {
+                // 3. SUPRESSÃO DE FALSO POSITIVO: Verifica se este lote já teve sucesso em tentativa anterior
+                if (jaFoiSincronizado(loteId)) {
+                    sucesso = true
+                    break
+                }
 
-                val jsonEnvio = JSONObject()
-                jsonEnvio.put("loteId", loteId)
-                
-                val jsonViagens = JSONArray()
-                viagens.forEach { v ->
-                    val obj = JSONObject().apply {
-                        put("data", v.data)
-                        put("condutor", v.condutor)
-                        put("origem", v.origem)
-                        put("destino", v.destino)
-                        put("saida", v.hSaida)
-                        put("chegada", v.hChegada)
-                        put("kmIni", v.kmIni)
-                        put("kmFin", v.kmFin)
-                        put("custo", v.custo)
-                        put("obs", v.observacoes)
-                        put("isEmpresa", v.isEmpresa)
+                val startTime = System.currentTimeMillis()
+                var responseCode = -1
+
+                try {
+                    if (tentativa > 1) {
+                        mostrarNotificacaoStatus("⏳ Tentativa $tentativa/$maxTentativas", "Reconectando ao servidor...", false)
+                        Thread.sleep(delays[tentativa - 2])
                     }
-                    jsonViagens.put(obj)
-                }
-                jsonEnvio.put("viagens", jsonViagens)
 
-                val jsonDespesas = JSONArray()
-                despesas.forEach { d ->
-                    val obj = JSONObject().apply {
-                        put("categoria", d.categoria)
-                        put("valor", d.valor)
+                    val url = URL(scriptUrl)
+                    val conn = url.openConnection() as HttpURLConnection
+                    conn.requestMethod = "POST"
+                    conn.doOutput = true
+                    conn.instanceFollowRedirects = true
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                    
+                    // 1. TIMEOUTS AJUSTADOS
+                    conn.connectTimeout = 15000 
+                    conn.readTimeout = 60000    
+
+                    val jsonEnvio = JSONObject()
+                    jsonEnvio.put("loteId", loteId)
+                    
+                    val jsonViagens = JSONArray()
+                    viagens.forEach { v ->
+                        val obj = JSONObject().apply {
+                            put("data", v.data); put("condutor", v.condutor); put("origem", v.origem)
+                            put("destino", v.destino); put("saida", v.hSaida); put("chegada", v.hChegada)
+                            put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
+                            put("obs", v.observacoes); put("isEmpresa", v.isEmpresa)
+                        }
+                        jsonViagens.put(obj)
                     }
-                    jsonDespesas.put(obj)
-                }
-                jsonEnvio.put("despesas", jsonDespesas)
+                    jsonEnvio.put("viagens", jsonViagens)
 
-                conn.outputStream.use { os ->
-                    os.write(jsonEnvio.toString().toByteArray())
-                }
+                    val jsonDespesas = JSONArray()
+                    despesas.forEach { d ->
+                        val obj = JSONObject().apply { put("categoria", d.categoria); put("valor", d.valor) }
+                        jsonDespesas.put(obj)
+                    }
+                    jsonEnvio.put("despesas", jsonDespesas)
 
-                // O Google Apps Script exige que leiamos a resposta para processar
-                val responseCode = conn.responseCode
-                val inputContent = if (responseCode in 200..399) {
-                    conn.inputStream.bufferedReader().use { it.readText() }
-                } else {
-                    conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "Sem resposta"
-                }
+                    conn.outputStream.use { os -> os.write(jsonEnvio.toString().toByteArray()) }
 
-                runOnUiThread {
-                    // Verifica se a palavra "Sucesso" veio na resposta do Google
-                    if (inputContent.contains("Sucesso", ignoreCase = true) || inputContent.contains("OK", ignoreCase = true)) {
-                        Toast.makeText(this@MainActivity, "Sincronizado na nuvem com sucesso! ☁️", Toast.LENGTH_LONG).show()
+                    responseCode = conn.responseCode
+                    val inputContent = if (responseCode in 200..399) {
+                        conn.inputStream.bufferedReader().use { it.readText() }
                     } else {
-                        // Só mostra o pop-up gigante se acontecer algum erro real
-                        androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
-                            .setTitle("Atenção na Sincronização")
-                            .setMessage("Retorno: $inputContent")
-                            .setPositiveButton("OK", null)
-                            .show()
+                        conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "Sem resposta"
+                    }
+
+                    val duration = System.currentTimeMillis() - startTime
+
+                    // 2. PARSER FLEXÍVEL DE RESPOSTA (Case Insensitive)
+                    val isSuccessContent = inputContent.contains("Sucesso", ignoreCase = true) || 
+                                         inputContent.contains("OK", ignoreCase = true) ||
+                                         inputContent.contains("success", ignoreCase = true)
+                    
+                    val isExplicitError = inputContent.contains("Erro:", ignoreCase = true) ||
+                                        inputContent.contains("Error", ignoreCase = true) ||
+                                        inputContent.contains("Exception", ignoreCase = true)
+
+                    if (responseCode in 200..299 && isSuccessContent) {
+                        sucesso = true
+                        salvarLog("Sucesso", "Code: $responseCode | Time: ${duration}ms | Resp: $inputContent", viagens.size, loteId)
+                        
+                        if (isAppForeground) {
+                            runOnUiThread {
+                                mostrarToastCustom("Sucesso!", "${viagens.size} viagens enviadas", "sucesso")
+                            }
+                        } else {
+                            mostrarNotificacaoStatus("✅ Sincronização concluída", "${viagens.size} viagens enviadas para a planilha", false)
+                        }
+                    } else {
+                        tentativa++
+                        if (tentativa > maxTentativas) {
+                            salvarLog("Erro", "Code: $responseCode | Resp: $inputContent", viagens.size, loteId)
+                            
+                            if (isAppForeground) {
+                                runOnUiThread {
+                                    mostrarToastCustom("Falha!", "Não foi possível confirmar o envio", "erro")
+                                }
+                            } else {
+                                mostrarNotificacaoStatus("❌ Falha na sincronização", "Não foi possível confirmar o envio. Toque para reenviar.", true)
+                            }
+                        }
+                    }
+                    conn.disconnect()
+                } catch (e: Exception) {
+                    val duration = System.currentTimeMillis() - startTime
+                    val errorMsg = e.message ?: "Erro desconhecido"
+                    
+                    tentativa++
+                    if (tentativa > maxTentativas) {
+                        // 4. NOTIFICAÇÃO DE ERRO DE REDE TEMPORÁRIO (Possível parcial)
+                        val isTimeout = e is SocketTimeoutException
+                        val statusTitle = if (isTimeout) "⚠️ Sincronização incerta" else "❌ Falha na sincronização"
+                        val statusDesc = if (isTimeout) "Verifique a planilha — possível sincronização parcial" else "Erro de conexão. Toque para reenviar."
+                        
+                        salvarLog("Erro", "Net Error: $errorMsg | Time: ${duration}ms", viagens.size, loteId)
+                        
+                        if (isAppForeground) {
+                            runOnUiThread {
+                                mostrarToastCustom(statusTitle, statusDesc, if (isTimeout) "info" else "erro")
+                            }
+                        } else {
+                            mostrarNotificacaoStatus(statusTitle, statusDesc, true)
+                        }
                     }
                 }
-                conn.disconnect()
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
         }.start()
+    }
+
+    private fun jaFoiSincronizado(loteId: String): Boolean {
+        return try {
+            val logsJson = getSharedPreferences("DadosApp", Context.MODE_PRIVATE).getString("log_sincronizacoes", "[]")
+            val array = JSONArray(logsJson)
+            for (i in 0 until array.length()) {
+                val log = array.getJSONObject(i)
+                if (log.getString("loteId") == loteId && log.getString("status") == "Sucesso") {
+                    return true
+                }
+            }
+            false
+        } catch (e: Exception) { false }
     }
 
     private fun iniciarCapturaComRecorte(isIda: Boolean, daCamera: Boolean) {
@@ -1855,6 +2112,210 @@ class MainActivity : AppCompatActivity() {
             e.printStackTrace()
             null
         }
+    }
+
+    private fun criarCanalNotificacao() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "Sincronização ControleKM"
+            val descriptionText = "Status dos envios para a planilha do Google"
+            val importance = NotificationManager.IMPORTANCE_DEFAULT
+            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
+                description = descriptionText
+            }
+            val notificationManager: NotificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun pedirPermissaoNotificacao() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    private fun mostrarNotificacaoStatus(titulo: String, texto: String, isErro: Boolean) {
+        // Se não tiver permissão e for Android 13+, não mostra nada (ou mantém AlertDialog legado)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && 
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            
+            if (!isErro) {
+                runOnUiThread { Toast.makeText(this, "✅ $titulo: $texto", Toast.LENGTH_LONG).show() }
+            } else {
+                runOnUiThread {
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle(titulo)
+                        .setMessage(texto)
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+            return
+        }
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            if (isErro) putExtra("RETRY_SYNC", true)
+        }
+        
+        val pendingIntent: PendingIntent = PendingIntent.getActivity(this, 0, intent, 
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
+            .setContentTitle(titulo)
+            .setContentText(texto)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(!isErro)
+            .setOngoing(isErro)
+
+        with(NotificationManagerCompat.from(this)) {
+            if (ActivityCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                notify(if (isErro) 1001 else 1002, builder.build())
+            }
+        }
+    }
+
+    private fun salvarLog(status: String, mensagem: String, qtd: Int, loteId: String) {
+        val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val logsJson = prefs.getString("log_sincronizacoes", "[]")
+        try {
+            val array = JSONArray(logsJson)
+            val log = JSONObject().apply {
+                put("timestamp", SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date()))
+                put("status", status)
+                put("mensagem", mensagem)
+                put("quantidadeViagens", qtd)
+                put("loteId", loteId)
+            }
+            
+            // Adiciona no início (mais recente)
+            val novoArray = JSONArray()
+            novoArray.put(log)
+            for (i in 0 until minOf(array.length(), 19)) {
+                novoArray.put(array.get(i))
+            }
+            
+            prefs.edit().putString("log_sincronizacoes", novoArray.toString()).apply()
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    private fun salvarCopiaUltimoLote() {
+        if (listaDeViagens.isEmpty()) return
+        val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        
+        val arrayV = JSONArray()
+        listaDeViagens.forEach { v ->
+            val obj = JSONObject().apply {
+                put("data", v.data); put("condutor", v.condutor); put("origem", v.origem); put("destino", v.destino)
+                put("hSaida", v.hSaida); put("hChegada", v.hChegada)
+                put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
+                put("observacoes", v.observacoes); put("isEmpresa", v.isEmpresa)
+            }
+            arrayV.put(obj)
+        }
+        
+        val arrayD = JSONArray()
+        listaDadosDespesas.forEach { d ->
+            val obj = JSONObject().apply {
+                put("path", d.path); put("categoria", d.categoria); put("valor", d.valor)
+            }
+            arrayD.put(obj)
+        }
+        
+        prefs.edit()
+            .putString("ultimo_lote_enviado", arrayV.toString())
+            .putString("ultimo_despesas_lote", arrayD.toString())
+            .apply()
+    }
+
+    private fun reenviarUltimoLote() {
+        try {
+            val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+            val viagensJson = prefs.getString("ultimo_lote_enviado", null)
+            val despesasJson = prefs.getString("ultimo_despesas_lote", "[]")
+            
+            if (viagensJson == null) {
+                Toast.makeText(this, "Nenhum lote anterior encontrado", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
+            val viagens = mutableListOf<Viagem>()
+            val arrayV = JSONArray(viagensJson)
+            for (i in 0 until arrayV.length()) {
+                val obj = arrayV.getJSONObject(i)
+                viagens.add(Viagem(
+                    obj.getString("data"), obj.getString("condutor"), obj.getString("origem"), obj.getString("destino"),
+                    obj.getString("hSaida"), obj.getString("hChegada"), obj.getInt("kmIni"), obj.getInt("kmFin"),
+                    obj.getDouble("custo"), obj.getString("observacoes"), obj.getBoolean("isEmpresa")
+                ))
+            }
+            
+            val despesas = mutableListOf<Despesa>()
+            val arrayD = JSONArray(despesasJson)
+            for (i in 0 until arrayD.length()) {
+                val obj = arrayD.getJSONObject(i)
+                despesas.add(Despesa(obj.getString("path"), obj.getString("categoria"), obj.getDouble("valor")))
+            }
+            
+            Toast.makeText(this, "Reenviando lote anterior...", Toast.LENGTH_SHORT).show()
+            salvarNaPlanilhaGoogle(viagens, despesas)
+        } catch (e: Exception) {
+            reportarErro(e, "Erro ao processar lote salvo")
+        }
+    }
+
+    private fun mostrarHistoricoLogs() {
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.layout_bottom_sheet_logs, null)
+        dialog.setContentView(view)
+        
+        val container = view.findViewById<LinearLayout>(R.id.containerLogs)
+        val btnLimpar = view.findViewById<ImageButton>(R.id.btnLimparLogs)
+        
+        btnLimpar.setOnClickListener {
+            getSharedPreferences("DadosApp", Context.MODE_PRIVATE).edit().remove("log_sincronizacoes").apply()
+            container.removeAllViews()
+            Toast.makeText(this, "Logs apagados", Toast.LENGTH_SHORT).show()
+        }
+        
+        val logsJson = getSharedPreferences("DadosApp", Context.MODE_PRIVATE).getString("log_sincronizacoes", "[]")
+        val array = JSONArray(logsJson)
+        
+        for (i in 0 until array.length()) {
+            val log = array.getJSONObject(i)
+            val logView = layoutInflater.inflate(android.R.layout.simple_list_item_2, container, false)
+            val text1 = logView.findViewById<TextView>(android.R.id.text1)
+            val text2 = logView.findViewById<TextView>(android.R.id.text2)
+            
+            val status = log.getString("status")
+            val icon = when(status) {
+                "Sucesso" -> "✅"
+                "Erro" -> "❌"
+                else -> "⏳"
+            }
+            
+            text1.text = "$icon ${log.getString("timestamp")} · ${log.getInt("quantidadeViagens")} viagens"
+            text1.setTextColor(ContextCompat.getColor(this, R.color.text_main))
+            
+            val msg = log.getString("mensagem")
+            text2.text = if (msg.length > 50) msg.take(50) + "..." else msg
+            text2.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
+            
+            logView.setOnLongClickListener {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("Sync Log", msg)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, "Mensagem copiada!", Toast.LENGTH_SHORT).show()
+                true
+            }
+            
+            container.addView(logView)
+        }
+        
+        dialog.show()
     }
 
     private fun processarOcrHodometro(uri: Uri, isIda: Boolean) {
@@ -1937,188 +2398,159 @@ class MainActivity : AppCompatActivity() {
         val document = PdfDocument()
         val paint = Paint()
 
-        // Variáveis de controle para múltiplas páginas
-        var currentPageNumber = 1
-        var pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
-        var page = document.startPage(pageInfo)
-        var canvas = page.canvas
+        try {
+            // Variáveis de controle para múltiplas páginas
+            var currentPageNumber = 1
+            var pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
+            var page = document.startPage(pageInfo)
+            var canvas = page.canvas
 
-        // Função interna para desenhar o cabeçalho das colunas de forma limpa
-        fun drawTableHeaders(canv: Canvas, y: Float) {
+            // Função interna para desenhar o cabeçalho das colunas de forma limpa
+            fun drawTableHeaders(canv: Canvas, y: Float) {
+                paint.isFakeBoldText = true
+                paint.textSize = 7.5f 
+                paint.textAlign = Paint.Align.CENTER
+                paint.color = Color.BLACK
+                
+                // Fundo cinza claro para o cabeçalho para destacar
+                val bgPaint = Paint().apply { color = Color.LTGRAY; alpha = 30 }
+                canv.drawRect(20f, y - 10f, 575f, y + 5f, bgPaint)
+
+                canv.drawText("DATA", 35f, y, paint)
+                canv.drawText("CONDUTOR", 75f, y, paint)
+                canv.drawText("ORIGEM", 125f, y, paint)
+                canv.drawText("DESTINO", 185f, y, paint)
+                canv.drawText("OBS.", 255f, y, paint)
+                canv.drawText("SAÍDA", 340f, y, paint)
+                canv.drawText("CHEG.", 380f, y, paint)
+                canv.drawText("KMI", 415f, y, paint)
+                canv.drawText("KMF", 450f, y, paint)
+                canv.drawText("URB.", 485f, y, paint)
+                canv.drawText("TOTAL", 520f, y, paint)
+                canv.drawText("CUSTO", 560f, y, paint)
+                
+                canv.drawLine(20f, y + 8f, 575f, y + 8f, paint)
+            }
+
+            // --- PÁGINA 1: Título e Fotos ---
             paint.isFakeBoldText = true
-            paint.textSize = 7.5f 
+            paint.textSize = 16f
             paint.textAlign = Paint.Align.CENTER
             paint.color = Color.BLACK
+            val tituloRelatorio = if (isExportacaoHistorico) "HISTÓRICO GERAL DE VIAGENS" else "RELATÓRIO GERAL DE VIAGENS"
+            canvas.drawText(tituloRelatorio, 297f, 50f, paint)
             
-            // Fundo cinza claro para o cabeçalho para destacar
-            val bgPaint = Paint().apply { color = Color.LTGRAY; alpha = 30 }
-            canv.drawRect(20f, y - 10f, 575f, y + 5f, bgPaint)
+            var yPos = 80f // Início das fotos
 
-            canv.drawText("DATA", 35f, y, paint)
-            canv.drawText("CONDUTOR", 75f, y, paint)
-            canv.drawText("ORIGEM", 125f, y, paint)
-            canv.drawText("DESTINO", 185f, y, paint)
-            canv.drawText("OBS.", 255f, y, paint)
-            canv.drawText("SAÍDA", 340f, y, paint)
-            canv.drawText("CHEG.", 380f, y, paint)
-            canv.drawText("KMI", 415f, y, paint)
-            canv.drawText("KMF", 450f, y, paint)
-            canv.drawText("URB.", 485f, y, paint)
-            canv.drawText("TOTAL", 520f, y, paint)
-            canv.drawText("CUSTO", 560f, y, paint)
+            if (!isExportacaoHistorico) {
+                fun desenharFotoFinal(path: String?, x: Float, y: Float, label: String, hora: String?) {
+                    path?.let {
+                        try {
+                            val bitmap = BitmapFactory.decodeFile(it) ?: return@let
+                            
+                            // Hora da foto
+                            paint.textSize = 9f
+                            paint.textAlign = Paint.Align.LEFT
+                            paint.isFakeBoldText = false
+                            canvas.drawText("Hora: ${hora ?: "--:--"}", x, y + 10f, paint)
+                            
+                            val drawWidth = 220f
+                            val drawHeight = 73f 
+                            canvas.drawBitmap(bitmap, null, RectF(x, y + 15f, x + drawWidth, y + 15f + drawHeight), Paint(Paint.FILTER_BITMAP_FLAG))
+                            
+                            // Legenda da foto
+                            paint.textSize = 9f
+                            paint.textAlign = Paint.Align.CENTER
+                            paint.isFakeBoldText = true
+                            canvas.drawText(label, x + (drawWidth / 2), y + drawHeight + 30f, paint)
+                            bitmap.recycle()
+                        } catch (e: Exception) { reportarErro(e, "Desenhar foto no PDF") }
+                    }
+                }
+
+                desenharFotoFinal(fotoIdaPath, 60f, yPos, "KM INICIAL (IDA)", fotoIdaHora)
+                desenharFotoFinal(fotoVoltaPath, 315f, yPos, "KM FINAL (VOLTA)", fotoVoltaHora)
+                yPos += 140f // Aumentado para garantir espaço para a legenda e não bater no cabeçalho
+            }
+
+            // Agora desenha o cabeçalho na primeira página abaixo das fotos
+            drawTableHeaders(canvas, yPos)
+            yPos += 30f // Início da lista de viagens
+
+            var kmSomaViagens = 0
+            var kmSomaCidade = 0
             
-            canv.drawLine(20f, y + 8f, 575f, y + 8f, paint)
-        }
+            paint.isFakeBoldText = false
+            paint.textSize = 7f
 
-        // --- PÁGINA 1: Título e Fotos ---
-        paint.isFakeBoldText = true
-        paint.textSize = 16f
-        paint.textAlign = Paint.Align.CENTER
-        paint.color = Color.BLACK
-        val tituloRelatorio = if (isExportacaoHistorico) "HISTÓRICO GERAL DE VIAGENS" else "RELATÓRIO GERAL DE VIAGENS"
-        canvas.drawText(tituloRelatorio, 297f, 50f, paint)
-        
-        var yPos = 80f // Início das fotos
-
-        if (!isExportacaoHistorico) {
-            fun desenharFotoFinal(path: String?, x: Float, y: Float, label: String, hora: String?) {
-                path?.let {
-                    val bitmap = BitmapFactory.decodeFile(it) ?: return@let
+            for (index in viagens.indices) {
+                val v = viagens[index]
+                
+                // VERIFICAÇÃO DE NOVA PÁGINA (Antes de desenhar a linha)
+                if (yPos > 780f) {
+                    document.finishPage(page)
+                    currentPageNumber++
+                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
+                    page = document.startPage(pageInfo)
+                    canvas = page.canvas
                     
-                    // Hora da foto
-                    paint.textSize = 9f
-                    paint.textAlign = Paint.Align.LEFT
-                    paint.isFakeBoldText = false
-                    canvas.drawText("Hora: ${hora ?: "--:--"}", x, y + 10f, paint)
-                    
-                    val drawWidth = 220f
-                    val drawHeight = 73f 
-                    canvas.drawBitmap(bitmap, null, RectF(x, y + 15f, x + drawWidth, y + 15f + drawHeight), Paint(Paint.FILTER_BITMAP_FLAG))
-                    
-                    // Legenda da foto
-                    paint.textSize = 9f
-                    paint.textAlign = Paint.Align.CENTER
+                    // Cabeçalho de continuação
                     paint.isFakeBoldText = true
-                    canvas.drawText(label, x + (drawWidth / 2), y + drawHeight + 30f, paint)
-                    bitmap.recycle()
+                    paint.textSize = 12f
+                    paint.textAlign = Paint.Align.CENTER
+                    canvas.drawText(tituloRelatorio + " (Cont.)", 297f, 40f, paint)
+                    
+                    yPos = 70f
+                    drawTableHeaders(canvas, yPos)
+                    yPos += 30f
+                    
+                    paint.isFakeBoldText = false
+                    paint.textSize = 7f
                 }
-            }
 
-            desenharFotoFinal(fotoIdaPath, 60f, yPos, "KM INICIAL (IDA)", fotoIdaHora)
-            desenharFotoFinal(fotoVoltaPath, 315f, yPos, "KM FINAL (VOLTA)", fotoVoltaHora)
-            yPos += 140f // Aumentado para garantir espaço para a legenda e não bater no cabeçalho
-        }
+                val nomeAbreviado = try {
+                    val partes = v.condutor.trim().split(" ")
+                    if (partes.size > 1) "${partes[0]} ${partes[1].take(1)}." else partes[0]
+                } catch (e: Exception) { v.condutor }
 
-        // Agora desenha o cabeçalho na primeira página abaixo das fotos
-        drawTableHeaders(canvas, yPos)
-        yPos += 30f // Início da lista de viagens
-
-        var kmSomaViagens = 0
-        var kmSomaCidade = 0
-        
-        paint.isFakeBoldText = false
-        paint.textSize = 7f
-
-        for (index in viagens.indices) {
-            val v = viagens[index]
-            
-            // VERIFICAÇÃO DE NOVA PÁGINA (Antes de desenhar a linha)
-            if (yPos > 780f) {
-                document.finishPage(page)
-                currentPageNumber++
-                pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
-                page = document.startPage(pageInfo)
-                canvas = page.canvas
-                
-                // Cabeçalho de continuação
-                paint.isFakeBoldText = true
-                paint.textSize = 12f
-                paint.textAlign = Paint.Align.CENTER
-                canvas.drawText(tituloRelatorio + " (Cont.)", 297f, 40f, paint)
-                
-                yPos = 70f
-                drawTableHeaders(canvas, yPos)
-                yPos += 30f
-                
-                paint.isFakeBoldText = false
-                paint.textSize = 7f
-            }
-
-            val nomeAbreviado = try {
-                val partes = v.condutor.trim().split(" ")
-                if (partes.size > 1) "${partes[0]} ${partes[1].take(1)}." else partes[0]
-            } catch (e: Exception) { v.condutor }
-
-            var kmUrbano = 0
-            if (index < viagens.size - 1) {
-                val vProx = viagens[index + 1]
-                if (vProx.kmIni > v.kmFin) {
-                    kmUrbano = vProx.kmIni - v.kmFin
+                var kmUrbano = 0
+                if (index < viagens.size - 1) {
+                    val vProx = viagens[index + 1]
+                    if (vProx.kmIni > v.kmFin) {
+                        kmUrbano = vProx.kmIni - v.kmFin
+                    }
                 }
-            }
 
-            canvas.drawText(v.data, 35f, yPos, paint)
-            canvas.drawText(nomeAbreviado.take(12), 75f, yPos, paint)
-            val offsetOrigem = desenharTextoComQuebra(canvas, v.origem, 125f, yPos, paint, 14)
-            val offsetDestino = desenharTextoComQuebra(canvas, v.destino, 185f, yPos, paint, 14)
-            val offsetObs = desenharTextoComQuebra(canvas, v.observacoes, 255f, yPos, paint, 16)
-            
-            canvas.drawText(v.hSaida, 340f, yPos, paint)
-            canvas.drawText(v.hChegada, 380f, yPos, paint)
-            canvas.drawText(v.kmIni.toString(), 415f, yPos, paint)
-            canvas.drawText(v.kmFin.toString(), 450f, yPos, paint)
-            canvas.drawText(kmUrbano.toString(), 485f, yPos, paint)
-            
-            val totalViagem = (v.kmFin - v.kmIni) + kmUrbano
-            canvas.drawText(totalViagem.toString(), 520f, yPos, paint)
-            
-            // Se for particular (não empresa), desenha o custo
-            if (!v.isEmpresa) {
-                val custoCalculado = totalViagem * 1.20
-                canvas.drawText(String.format(Locale.forLanguageTag("pt-BR"), "%.2f", custoCalculado), 560f, yPos, paint)
+                canvas.drawText(v.data, 35f, yPos, paint)
+                canvas.drawText(nomeAbreviado.take(12), 75f, yPos, paint)
+                val offsetOrigem = desenharTextoComQuebra(canvas, v.origem, 125f, yPos, paint, 14)
+                val offsetDestino = desenharTextoComQuebra(canvas, v.destino, 185f, yPos, paint, 14)
+                val offsetObs = desenharTextoComQuebra(canvas, v.observacoes, 255f, yPos, paint, 16)
                 
-                kmSomaViagens += (v.kmFin - v.kmIni)
-                kmSomaCidade += kmUrbano
+                canvas.drawText(v.hSaida, 340f, yPos, paint)
+                canvas.drawText(v.hChegada, 380f, yPos, paint)
+                canvas.drawText(v.kmIni.toString(), 415f, yPos, paint)
+                canvas.drawText(v.kmFin.toString(), 450f, yPos, paint)
+                canvas.drawText(kmUrbano.toString(), 485f, yPos, paint)
+                
+                val totalViagem = (v.kmFin - v.kmIni) + kmUrbano
+                canvas.drawText(totalViagem.toString(), 520f, yPos, paint)
+                
+                // Se for particular (não empresa), desenha o custo
+                if (!v.isEmpresa) {
+                    val custoCalculado = totalViagem * 1.20
+                    canvas.drawText(String.format(Locale.forLanguageTag("pt-BR"), "%.2f", custoCalculado), 560f, yPos, paint)
+                    
+                    kmSomaViagens += (v.kmFin - v.kmIni)
+                    kmSomaCidade += kmUrbano
+                }
+                
+                val saltoLinha = Math.max(offsetOrigem, Math.max(offsetDestino, offsetObs))
+                yPos += 25f + saltoLinha
             }
-            
-            val saltoLinha = Math.max(offsetOrigem, Math.max(offsetDestino, offsetObs))
-            yPos += 25f + saltoLinha
-        }
 
-        // Rodapé de Totais
-        if (yPos > 750f) {
-            document.finishPage(page)
-            currentPageNumber++
-            pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
-            page = document.startPage(pageInfo)
-            canvas = page.canvas
-            yPos = 60f
-        }
-
-        canvas.drawLine(20f, yPos, 575f, yPos, paint)
-        yPos += 25f
-        paint.isFakeBoldText = true
-        paint.textAlign = Paint.Align.RIGHT
-        paint.textSize = 10f
-        
-        var kmGeral = 0
-        if (viagens.isNotEmpty()) {
-            kmGeral = viagens.last().kmFin - viagens.first().kmIni
-        }
-        val custoGeral = kmGeral * 1.20
-
-        val temParticular = viagens.any { !it.isEmpresa }
-        val resumoTotal = if (temParticular) {
-            "KM ESTRADA: $kmSomaViagens | KM CIDADE: $kmSomaCidade | TOTAL: $kmGeral KM | REEMBOLSO: R$ ${String.format(Locale.forLanguageTag("pt-BR"), "%.2f", kmGeral * 1.20)}"
-        } else {
-            "KM ESTRADA: $kmSomaViagens | KM CIDADE: $kmSomaCidade | TOTAL: $kmGeral KM"
-        }
-        canvas.drawText(resumoTotal, 570f, yPos, paint)
-
-        // SEÇÃO DE DESPESAS (Recibos)
-        if (listaFotosDespesas.isNotEmpty() && !isExportacaoHistorico) {
-            yPos += 50f
-            if (yPos > 600f) {
+            // Rodapé de Totais
+            if (yPos > 750f) {
                 document.finishPage(page)
                 currentPageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
@@ -2127,85 +2559,125 @@ class MainActivity : AppCompatActivity() {
                 yPos = 60f
             }
 
-            paint.textAlign = Paint.Align.LEFT
-            paint.textSize = 10f
+            canvas.drawLine(20f, yPos, 575f, yPos, paint)
+            yPos += 25f
             paint.isFakeBoldText = true
-            canvas.drawText("COMPROVANTES DE DESPESAS:", 40f, yPos, paint)
+            paint.textAlign = Paint.Align.RIGHT
+            paint.textSize = 10f
             
-            yPos += 20f
-            var xPosRecibo = 40f
-            val reciboWidth = 230f
-            val reciboHeight = 230f
-            
-            for (path in listaFotosDespesas) {
-                if (yPos + reciboHeight > 800f) {
+            var kmGeral = 0
+            if (viagens.isNotEmpty()) {
+                kmGeral = viagens.last().kmFin - viagens.first().kmIni
+            }
+            val custoGeral = kmGeral * 1.20
+
+            val temParticular = viagens.any { !it.isEmpresa }
+            val resumoTotal = if (temParticular) {
+                "KM ESTRADA: $kmSomaViagens | KM CIDADE: $kmSomaCidade | TOTAL: $kmGeral KM | REEMBOLSO: R$ ${String.format(Locale.forLanguageTag("pt-BR"), "%.2f", kmGeral * 1.20)}"
+            } else {
+                "KM ESTRADA: $kmSomaViagens | KM CIDADE: $kmSomaCidade | TOTAL: $kmGeral KM"
+            }
+            canvas.drawText(resumoTotal, 570f, yPos, paint)
+
+            // SEÇÃO DE DESPESAS (Recibos)
+            if (listaFotosDespesas.isNotEmpty() && !isExportacaoHistorico) {
+                yPos += 50f
+                if (yPos > 600f) {
                     document.finishPage(page)
                     currentPageNumber++
                     pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
                     page = document.startPage(pageInfo)
                     canvas = page.canvas
                     yPos = 60f
-                    xPosRecibo = 40f
                 }
 
-                val bitmap = BitmapFactory.decodeFile(path) ?: continue
-                canvas.drawBitmap(bitmap, null, RectF(xPosRecibo, yPos, xPosRecibo + reciboWidth, yPos + reciboHeight), Paint(Paint.FILTER_BITMAP_FLAG))
-                bitmap.recycle()
+                paint.textAlign = Paint.Align.LEFT
+                paint.textSize = 10f
+                paint.isFakeBoldText = true
+                canvas.drawText("COMPROVANTES DE DESPESAS:", 40f, yPos, paint)
                 
-                xPosRecibo += reciboWidth + 20f
-                if (xPosRecibo + reciboWidth > 580f) {
-                    xPosRecibo = 40f
-                    yPos += reciboHeight + 20f
-                }
-            }
-        }
-
-        // Assinatura final
-        paint.textSize = 8f
-        paint.isFakeBoldText = false
-        paint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("Aplicativo criado por Luiz Gustavo", 575f, 825f, paint)
-        document.finishPage(page)
-
-        val pasta = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-        if (!pasta.exists()) pasta.mkdirs()
-        val timestamp = SimpleDateFormat("ddMMyyyy_HHmm", Locale.getDefault()).format(Date())
-        val arquivo = File(pasta, "Relatorio_KM_$timestamp.pdf")
-
-        try {
-            document.writeTo(FileOutputStream(arquivo))
-            if (!isExportacaoHistorico) {
-                // Adiciona ao Histórico Permanente (que alimenta o Consumo Semanal)
-                val prefsLocal = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
-                val currentUser = auth.currentUser
-                val historicoKey = if (currentUser != null) "historico_local_${currentUser.uid}" else "historico_geral_local"
-                val historicoAtual = prefsLocal.getString(historicoKey, "[]")
-                val arrayHistorico = JSONArray(historicoAtual)
+                yPos += 20f
+                var xPosRecibo = 40f
+                val reciboWidth = 230f
+                val reciboHeight = 230f
                 
-                listaDeViagens.forEach { v ->
-                    val obj = JSONObject().apply {
-                        put("data", v.data); put("condutor", v.condutor); put("origem", v.origem); put("destino", v.destino)
-                        put("hSaida", v.hSaida); put("hChegada", v.hChegada)
-                        put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
-                        put("observacoes", v.observacoes)
+                for (path in listaFotosDespesas) {
+                    if (yPos + reciboHeight > 800f) {
+                        document.finishPage(page)
+                        currentPageNumber++
+                        pageInfo = PdfDocument.PageInfo.Builder(595, 842, currentPageNumber).create()
+                        page = document.startPage(pageInfo)
+                        canvas = page.canvas
+                        yPos = 60f
+                        xPosRecibo = 40f
                     }
-                    arrayHistorico.put(obj)
-                }
-                prefsLocal.edit().putString(historicoKey, arrayHistorico.toString()).apply()
 
-                listaDeViagens.clear()
-                fotoIdaPath = null
-                fotoVoltaPath = null
-                listaFotosDespesas.clear()
+                    try {
+                        val bitmap = BitmapFactory.decodeFile(path) ?: continue
+                        canvas.drawBitmap(bitmap, null, RectF(xPosRecibo, yPos, xPosRecibo + reciboWidth, yPos + reciboHeight), Paint(Paint.FILTER_BITMAP_FLAG))
+                        bitmap.recycle()
+                    } catch (e: Exception) { reportarErro(e, "Anexar recibo ao PDF") }
+                    
+                    xPosRecibo += reciboWidth + 20f
+                    if (xPosRecibo + reciboWidth > 580f) {
+                        xPosRecibo = 40f
+                        yPos += reciboHeight + 20f
+                    }
+                }
             }
-            ultimoArquivoGerado = arquivo
-            btnCompartilhar.visibility = View.VISIBLE
-            validarBotoes()
-            salvarEstado()
-            compartilharArquivo(arquivo)
+
+            // Assinatura final
+            paint.textSize = 8f
+            paint.isFakeBoldText = false
+            paint.textAlign = Paint.Align.RIGHT
+            canvas.drawText("Aplicativo criado por Luiz Gustavo", 575f, 825f, paint)
+            document.finishPage(page)
+
+            val pasta = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+            if (!pasta.exists()) pasta.mkdirs()
+            val timestamp = SimpleDateFormat("ddMMyyyy_HHmm", Locale.getDefault()).format(Date())
+            val arquivo = File(pasta, "Relatorio_KM_$timestamp.pdf")
+
+            try {
+                document.writeTo(FileOutputStream(arquivo))
+                if (!isExportacaoHistorico) {
+                    // Adiciona ao Histórico Permanente (que alimenta o Consumo Semanal)
+                    val prefsLocal = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+                    val currentUser = auth.currentUser
+                    val historicoKey = if (currentUser != null) "historico_local_${currentUser.uid}" else "historico_geral_local"
+                    val historicoAtual = prefsLocal.getString(historicoKey, "[]")
+                    val arrayHistorico = JSONArray(historicoAtual)
+                    
+                    listaDeViagens.forEach { v ->
+                        val obj = JSONObject().apply {
+                            put("data", v.data); put("condutor", v.condutor); put("origem", v.origem); put("destino", v.destino)
+                            put("hSaida", v.hSaida); put("hChegada", v.hChegada)
+                            put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
+                            put("observacoes", v.observacoes)
+                        }
+                        arrayHistorico.put(obj)
+                    }
+                    prefsLocal.edit().putString(historicoKey, arrayHistorico.toString()).apply()
+
+                    salvarCopiaUltimoLote() // SALVA ANTES DE LIMPAR
+
+                    listaDeViagens.clear()
+                    fotoIdaPath = null
+                    fotoVoltaPath = null
+                    listaFotosDespesas.clear()
+                }
+                ultimoArquivoGerado = arquivo
+                btnCompartilhar.visibility = View.VISIBLE
+                validarBotoes()
+                salvarEstado()
+                compartilharArquivo(arquivo)
+            } catch (e: Exception) {
+                reportarErro(e, "Erro ao gravar PDF: ${e.message}")
+            }
         } catch (e: Exception) {
-            Toast.makeText(this, "Erro: ${e.message}", Toast.LENGTH_SHORT).show()
+            reportarErro(e, "Erro geral geração PDF: ${e.message}")
+        } finally {
+            try { document.close() } catch (e: Exception) { }
         }
-        document.close()
     }
 }
