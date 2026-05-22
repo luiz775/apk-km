@@ -101,6 +101,11 @@ data class Despesa(
 
 class MainActivity : AppCompatActivity() {
 
+    companion object {
+        private const val SCRIPT_URL_PRINCIPAL = "https://script.google.com/macros/s/AKfycbz-vPT7DHjux2zBzc2PAo6a3O99rb4aE70xjdWVtcnNIbR00S1045Fa15lwe-J58Yhs/exec"
+        private const val SCRIPT_URL_BACKUP = "https://script.google.com/macros/s/AKfycbytcsu5RYHLOB8Tymo9D6nNkXd4inEgu7NdfMSl2I1xpAFHTavJNwFIqCnWum0_QPHKhw/exec"
+    }
+
     private val auth by lazy { Firebase.auth }
     private val db by lazy { Firebase.firestore }
 
@@ -1924,7 +1929,7 @@ class MainActivity : AppCompatActivity() {
 
         if (isTreinamento) {
             Toast.makeText(this, "🎓 Modo treinamento - sincronização simulada", Toast.LENGTH_SHORT).show()
-            salvarLog("Sucesso (TREINAMENTO)", "Sincronização simulada com sucesso", listaDeViagens.size, "TRAINING_MODE")
+            salvarLog("Sucesso (TREINAMENTO)", "Sincronização simulada com sucesso", listaDeViagens.size, "TRAINING_MODE", "PRINCIPAL")
             return
         }
 
@@ -1948,7 +1953,7 @@ class MainActivity : AppCompatActivity() {
         // LOG INICIAL (PENDENTE)
         val condutor = if (copiaParaEnvio.isNotEmpty()) copiaParaEnvio[0].condutor.take(4).uppercase().replace(" ", "") else "USER"
         val loteId = "${condutor}_${System.currentTimeMillis()}"
-        salvarLog("Pendente", "Iniciando sincronização...", copiaParaEnvio.size, loteId)
+        salvarLog("Pendente", "Iniciando sincronização...", copiaParaEnvio.size, loteId, "PRINCIPAL")
         
         salvarNaPlanilhaGoogle(copiaParaEnvio, copiaDespesas, loteId)
 
@@ -1988,149 +1993,118 @@ class MainActivity : AppCompatActivity() {
 
         if (isTreinamento) {
             Handler(Looper.getMainLooper()).postDelayed({
-                mostrarNotificacaoStatus("Sincronização Simulada", "Dados de treinamento processados", true)
-                mostrarToastCustom("Sucesso (TREINAMENTO)", "Os dados foram simulados com sucesso.", "OK")
+                mostrarNotificacaoStatus("Sincronização Simulada", "Dados de treinamento processados", false)
+                mostrarToastCustom("Sucesso (TREINAMENTO)", "Os dados foram simulados com sucesso.", "info")
             }, 1000)
+            salvarLog("Sucesso (TREINAMENTO)", "Sincronização simulada", viagens.size, "TRAINING_MODE", "PRINCIPAL")
             return
         }
 
-        val scriptUrl = "https://script.google.com/macros/s/AKfycbz-vPT7DHjux2zBzc2PAo6a3O99rb4aE70xjdWVtcnNIbR00S1045Fa15lwe-J58Yhs/exec"
-        
-        if (scriptUrl.isEmpty() || scriptUrl.contains("SUA_URL")) return
-
-        runOnUiThread { Toast.makeText(this, "📤 Enviando para a nuvem em segundo plano...", Toast.LENGTH_SHORT).show() }
+        runOnUiThread { Toast.makeText(this, "📤 Enviando para a nuvem...", Toast.LENGTH_SHORT).show() }
 
         Thread {
-            var sucesso = false
-            var tentativa = 1
-            val maxTentativas = 3
-            val delays = listOf(3000L, 7000L, 15000L)
-            
             val loteId = loteIdExterno ?: if (viagens.isNotEmpty()) {
                 val condutor = viagens[0].condutor.take(4).uppercase().replace(" ", "")
                 "${condutor}_${System.currentTimeMillis()}"
             } else System.currentTimeMillis().toString()
 
-            while (tentativa <= maxTentativas && !sucesso) {
-                // 3. SUPRESSÃO DE FALSO POSITIVO: Verifica se este lote já teve sucesso em tentativa anterior
-                if (jaFoiSincronizado(loteId)) {
-                    sucesso = true
-                    break
+            // 1. Tenta na URL PRINCIPAL (3 tentativas)
+            var sucesso = false
+            val delaysPrincipal = listOf(0L, 2000L, 5000L, 10000L)
+            
+            for (tentativa in 1..3) {
+                if (jaFoiSincronizado(loteId)) { sucesso = true; break }
+                
+                if (tentativa > 1) {
+                    mostrarNotificacaoStatus("⏳ Tentativa $tentativa/3 (Principal)", "Reconectando...", false)
+                    Thread.sleep(delaysPrincipal[tentativa - 1])
                 }
 
-                val startTime = System.currentTimeMillis()
-                var responseCode = -1
+                val resultado = tentarEnviarParaUrl(SCRIPT_URL_PRINCIPAL, viagens, despesas, loteId)
+                if (resultado.first) {
+                    sucesso = true
+                    salvarLog("Sucesso", resultado.second, viagens.size, loteId, "PRINCIPAL")
+                    runOnUiThread { mostrarToastCustom("Sucesso!", "${viagens.size} viagens enviadas", "sucesso") }
+                    mostrarNotificacaoStatus("✅ Sincronização concluída", "${viagens.size} viagens enviadas (Principal)", false)
+                    break
+                }
+            }
 
-                try {
-                    if (tentativa > 1) {
-                        mostrarNotificacaoStatus("⏳ Tentativa $tentativa/$maxTentativas", "Reconectando ao servidor...", false)
-                        Thread.sleep(delays[tentativa - 2])
+            // 2. FAILOVER: Se falhou na principal, tenta na BACKUP (2 tentativas)
+            if (!sucesso) {
+                val delaysBackup = listOf(3000L, 8000L)
+                for (tentativa in 1..2) {
+                    if (jaFoiSincronizado(loteId)) { sucesso = true; break }
+                    
+                    mostrarNotificacaoStatus("⚠️ Tentativa $tentativa/2 (Backup)", "Usando rota de emergência...", false)
+                    Thread.sleep(delaysBackup[tentativa - 1])
+
+                    val resultado = tentarEnviarParaUrl(SCRIPT_URL_BACKUP, viagens, despesas, loteId)
+                    if (resultado.first) {
+                        sucesso = true
+                        salvarLog("Sucesso", resultado.second, viagens.size, loteId, "BACKUP")
+                        runOnUiThread { mostrarToastCustom("⚠️ Via Backup", "Enviado via backup - verifique a conta principal", "info") }
+                        mostrarNotificacaoStatus("⚠️ Enviado via backup", "Verificar conta principal", false)
+                        break
                     }
+                }
+            }
 
-                    val url = URL(scriptUrl)
-                    val conn = url.openConnection() as HttpURLConnection
-                    conn.requestMethod = "POST"
-                    conn.doOutput = true
-                    conn.instanceFollowRedirects = true
-                    conn.setRequestProperty("Content-Type", "application/json")
-                    conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-                    
-                    // 1. TIMEOUTS AJUSTADOS
-                    conn.connectTimeout = 15000 
-                    conn.readTimeout = 60000    
+            // 3. FALHA TOTAL
+            if (!sucesso) {
+                salvarLog("Erro", "Falha total em ambas as contas", viagens.size, loteId, "ERRO")
+                runOnUiThread { mostrarToastCustom("Falha Crítica", "Todas as tentativas falharam", "erro") }
+                mostrarNotificacaoStatus("❌ Falha na sincronização", "Não foi possível enviar. Toque para reenviar.", true)
+            }
+        }.start()
+    }
 
-                    val jsonEnvio = JSONObject()
-                    jsonEnvio.put("loteId", loteId)
-                    
-                    val jsonViagens = JSONArray()
+    private fun tentarEnviarParaUrl(scriptUrl: String, viagens: List<Viagem>, despesas: List<Despesa>, loteId: String): Pair<Boolean, String> {
+        return try {
+            val url = URL(scriptUrl)
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.instanceFollowRedirects = true
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+            conn.connectTimeout = 15000 
+            conn.readTimeout = 60000    
+
+            val jsonEnvio = JSONObject().apply {
+                put("loteId", loteId)
+                put("viagens", JSONArray().apply {
                     viagens.forEach { v ->
-                        val obj = JSONObject().apply {
+                        put(JSONObject().apply {
                             put("data", v.data); put("condutor", v.condutor); put("origem", v.origem)
                             put("destino", v.destino); put("saida", v.hSaida); put("chegada", v.hChegada)
                             put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
                             put("obs", v.observacoes); put("isEmpresa", v.isEmpresa)
-                        }
-                        jsonViagens.put(obj)
+                        })
                     }
-                    jsonEnvio.put("viagens", jsonViagens)
-
-                    val jsonDespesas = JSONArray()
+                })
+                put("despesas", JSONArray().apply {
                     despesas.forEach { d ->
-                        val obj = JSONObject().apply { put("categoria", d.categoria); put("valor", d.valor) }
-                        jsonDespesas.put(obj)
+                        put(JSONObject().apply { put("categoria", d.categoria); put("valor", d.valor) })
                     }
-                    jsonEnvio.put("despesas", jsonDespesas)
-
-                    conn.outputStream.use { os -> os.write(jsonEnvio.toString().toByteArray()) }
-
-                    responseCode = conn.responseCode
-                    val inputContent = if (responseCode in 200..399) {
-                        conn.inputStream.bufferedReader().use { it.readText() }
-                    } else {
-                        conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "Sem resposta"
-                    }
-
-                    val duration = System.currentTimeMillis() - startTime
-
-                    // 2. PARSER FLEXÍVEL DE RESPOSTA (Case Insensitive)
-                    val isSuccessContent = inputContent.contains("Sucesso", ignoreCase = true) || 
-                                         inputContent.contains("OK", ignoreCase = true) ||
-                                         inputContent.contains("success", ignoreCase = true)
-                    
-                    val isExplicitError = inputContent.contains("Erro:", ignoreCase = true) ||
-                                        inputContent.contains("Error", ignoreCase = true) ||
-                                        inputContent.contains("Exception", ignoreCase = true)
-
-                    if (responseCode in 200..299 && isSuccessContent) {
-                        sucesso = true
-                        salvarLog("Sucesso", "Code: $responseCode | Time: ${duration}ms | Resp: $inputContent", viagens.size, loteId)
-                        
-                        if (isAppForeground) {
-                            runOnUiThread {
-                                mostrarToastCustom("Sucesso!", "${viagens.size} viagens enviadas", "sucesso")
-                            }
-                        } else {
-                            mostrarNotificacaoStatus("✅ Sincronização concluída", "${viagens.size} viagens enviadas para a planilha", false)
-                        }
-                    } else {
-                        tentativa++
-                        if (tentativa > maxTentativas) {
-                            salvarLog("Erro", "Code: $responseCode | Resp: $inputContent", viagens.size, loteId)
-                            
-                            if (isAppForeground) {
-                                runOnUiThread {
-                                    mostrarToastCustom("Falha!", "Não foi possível confirmar o envio", "erro")
-                                }
-                            } else {
-                                mostrarNotificacaoStatus("❌ Falha na sincronização", "Não foi possível confirmar o envio. Toque para reenviar.", true)
-                            }
-                        }
-                    }
-                    conn.disconnect()
-                } catch (e: Exception) {
-                    val duration = System.currentTimeMillis() - startTime
-                    val errorMsg = e.message ?: "Erro desconhecido"
-                    
-                    tentativa++
-                    if (tentativa > maxTentativas) {
-                        // 4. NOTIFICAÇÃO DE ERRO DE REDE TEMPORÁRIO (Possível parcial)
-                        val isTimeout = e is SocketTimeoutException
-                        val statusTitle = if (isTimeout) "⚠️ Sincronização incerta" else "❌ Falha na sincronização"
-                        val statusDesc = if (isTimeout) "Verifique a planilha — possível sincronização parcial" else "Erro de conexão. Toque para reenviar."
-                        
-                        salvarLog("Erro", "Net Error: $errorMsg | Time: ${duration}ms", viagens.size, loteId)
-                        
-                        if (isAppForeground) {
-                            runOnUiThread {
-                                mostrarToastCustom(statusTitle, statusDesc, if (isTimeout) "info" else "erro")
-                            }
-                        } else {
-                            mostrarNotificacaoStatus(statusTitle, statusDesc, true)
-                        }
-                    }
-                }
+                })
             }
-        }.start()
+
+            conn.outputStream.use { os -> os.write(jsonEnvio.toString().toByteArray()) }
+
+            val responseCode = conn.responseCode
+            val inputContent = if (responseCode in 200..399) {
+                conn.inputStream.bufferedReader().use { it.readText() }
+            } else {
+                conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "Sem resposta"
+            }
+            conn.disconnect()
+
+            val isSuccess = responseCode in 200..299 && (inputContent.contains("Sucesso", true) || inputContent.contains("OK", true))
+            Pair(isSuccess, "Code: $responseCode | Resp: $inputContent")
+        } catch (e: Exception) {
+            Pair(false, e.message ?: "Erro de rede")
+        }
     }
 
     private fun jaFoiSincronizado(loteId: String): Boolean {
@@ -2281,7 +2255,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun salvarLog(status: String, mensagem: String, qtd: Int, loteId: String) {
+    private fun salvarLog(status: String, mensagem: String, qtd: Int, loteId: String, destino: String) {
         val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
         val logsJson = prefs.getString("log_sincronizacoes", "[]")
         try {
@@ -2292,6 +2266,7 @@ class MainActivity : AppCompatActivity() {
                 put("mensagem", mensagem)
                 put("quantidadeViagens", qtd)
                 put("loteId", loteId)
+                put("destino", destino)
             }
             
             // Adiciona no início (mais recente)
@@ -2394,17 +2369,25 @@ class MainActivity : AppCompatActivity() {
             val text2 = logView.findViewById<TextView>(android.R.id.text2)
             
             val status = log.getString("status")
+            val destino = if (log.has("destino")) log.getString("destino") else "DESCONHECIDO"
+            
             val icon = when(status) {
                 "Sucesso" -> "✅"
                 "Erro" -> "❌"
                 else -> "⏳"
             }
             
-            text1.text = "$icon ${log.getString("timestamp")} · ${log.getInt("quantidadeViagens")} viagens"
-            text1.setTextColor(ContextCompat.getColor(this, R.color.text_main))
+            val corDestino = when(destino) {
+                "PRINCIPAL" -> "#4CAF50" // Verde
+                "BACKUP" -> "#FFC107"    // Amarelo
+                else -> "#F44336"       // Vermelho
+            }
+
+            text1.text = "$icon ${log.getString("timestamp")} · $destino"
+            text1.setTextColor(Color.parseColor(corDestino))
             
-            val msg = log.getString("mensagem")
-            text2.text = if (msg.length > 50) msg.take(50) + "..." else msg
+            val msg = "Qtd: ${log.getInt("quantidadeViagens")} | " + log.getString("mensagem")
+            text2.text = if (msg.length > 60) msg.take(60) + "..." else msg
             text2.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
             
             logView.setOnLongClickListener {
