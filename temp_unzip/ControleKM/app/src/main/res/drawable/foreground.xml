@@ -1,0 +1,48 @@
+<!--
+  ~ Copyright (C) 2026 The Android Open Source Project
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~      http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="192.76"
+    android:viewportHeight="192.76">
+  <group android:scaleX="0.81"
+      android:scaleY="0.81"
+      android:translateX="18.3122"
+      android:translateY="18.3122">
+    <path
+        android:pathData="M0,0h192.76v192.76H0V0z"
+        android:fillColor="#fff"
+        android:fillType="evenOdd"/>
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M99.88,134.42v-76.46h31.7l10.52,41.28 10.59,-41.28h30.76v76.46h-21.98V83.43l-14.07,51h-14.94l-14.07,-50.13v50.13H99.88z"
+        android:strokeWidth="2.232"
+        android:strokeColor="#fff"
+        android:fillType="evenOdd"/>
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M90.27,96.32l55.85,-36.34c-10.46,-12.71 -27.24,-20.57 -43.73,-20.57 -31.26,0 -56.91,25.65 -56.91,56.91 0,31.26 25.65,56.91 56.91,56.91 16.25,0 32.32,-7.39 43.02,-19.62L90.27,96.32zM90.21,96.38l90.18,-50.7c-16.78,-25.88 -47.1,-42.31 -78.06,-42.31 -51.06,0 -93.01,41.96 -93.01,93.01 0,51.06 41.96,93.01 93.01,93.01 30.97,0 60.93,-16.01 78.06,-41.96L90.21,96.38z"
+        android:strokeWidth="2.232"
+        android:strokeColor="#fff"
+        android:fillType="evenOdd"/>
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M26.9,134.42v-76.46h22.92v30.76L70.93,57.96h22.85L72.67,86.98l23.72,47.44H69.99l-12.26,-28.15 -7.91,10.59v17.56H26.9z"
+        android:strokeWidth="2.232"
+        android:strokeColor="#fff"
+        android:fillType="evenOdd"/>
+  </group>
+</vector>

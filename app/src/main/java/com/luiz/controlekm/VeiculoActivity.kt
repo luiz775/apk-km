@@ -7,6 +7,7 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -27,6 +28,9 @@ class VeiculoActivity : AppCompatActivity() {
     private lateinit var btnVoltar: ImageButton
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val themePrefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val savedTheme = themePrefs.getInt("tema_preferido", AppCompatDelegate.MODE_NIGHT_YES)
+        AppCompatDelegate.setDefaultNightMode(savedTheme)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_veiculo)
 

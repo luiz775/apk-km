@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="#000000">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:gravity="center">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Registro de Viagem"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <Button
+                android:id="@+id/btnFotoIda"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="📸 FOTO IDA"
+                android:backgroundTint="#FF5722"
+                android:layout_marginEnd="4dp"
+                android:textSize="12sp"/>
+
+            <Button
+                android:id="@+id/btnFotoVolta"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="📸 FOTO VOLTA"
+                android:backgroundTint="#607D8B"
+                android:layout_marginStart="4dp"
+                android:enabled="false"
+                android:textSize="12sp"/>
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/editData"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="Data (DD/MM/AAAA)"
+            android:gravity="center"
+            android:textColor="#000000"
+            android:textColorHint="#666666"
+            android:background="@android:drawable/editbox_background"
+            android:layout_marginBottom="8dp"
+            android:inputType="phone"
+            android:textSize="14sp"/>
+
+        <EditText
+            android:id="@+id/editCondutor"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="Nome do Condutor"
+            android:textColor="#000000"
+            android:textColorHint="#666666"
+            android:gravity="center"
+            android:background="@android:drawable/editbox_background"
+            android:layout_marginBottom="8dp"
+            android:textSize="14sp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <EditText
+                android:id="@+id/editHoraSaida"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:hint="Saída"
+                android:textColor="#000000"
+                android:textColorHint="#666666"
+                android:gravity="center"
+                android:layout_marginEnd="4dp"
+                android:background="@android:drawable/editbox_background"
+                android:inputType="time"
+                android:textSize="14sp"/>
+
+            <EditText
+                android:id="@+id/editHoraChegada"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:hint="Chegada"
+                android:textColor="#000000"
+                android:textColorHint="#666666"
+                android:gravity="center"
+                android:layout_marginStart="4dp"
+                android:background="@android:drawable/editbox_background"
+                android:inputType="time"
+                android:textSize="14sp"/>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <EditText
+                android:id="@+id/editKmInicial"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:textColor="#000000"
+                android:textColorHint="#666666"
+                android:hint="KM Inicial"
+                android:inputType="number"
+                android:gravity="center"
+                android:layout_marginEnd="4dp"
+                android:background="@android:drawable/editbox_background"
+                android:textSize="14sp"/>
+
+            <EditText
+                android:id="@+id/editKmFinal"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:textColor="#000000"
+                android:textColorHint="#666666"
+                android:hint="KM Final"
+                android:inputType="number"
+                android:gravity="center"
+                android:layout_marginStart="4dp"
+                android:background="@android:drawable/editbox_background"
+                android:textSize="14sp"/>
+        </LinearLayout>
+
+        <!-- DESTINO COM AUTOCOMPLETE -->
+        <AutoCompleteTextView
+            android:id="@+id/editDestino"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="Destino (Ex: Dourados > Jardim)"
+            android:textColor="#000000"
+            android:textColorHint="#666666"
+            android:gravity="center"
+            android:completionThreshold="1"
+            android:background="@android:drawable/editbox_background"
+            android:layout_marginBottom="8dp"
+            android:textSize="14sp"/>
+
+        <!-- SELEÇÃO DE VEÍCULO -->
+        <RadioGroup
+            android:id="@+id/radioGroupVeiculo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginBottom="8dp">
+
+            <RadioButton
+                android:id="@+id/radioParticular"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Particular"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#FFFFFF"
+                android:checked="true"
+                android:layout_marginEnd="16dp"
+                android:textSize="14sp"/>
+
+            <RadioButton
+                android:id="@+id/radioEmpresa"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Empresa"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#FFFFFF"
+                android:textSize="14sp"/>
+        </RadioGroup>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp">
+
+            <Button
+                android:id="@+id/btnAdicionar"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="1"
+                android:text="ADICIONAR"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="#4CAF50"
+                android:textSize="12sp"/>
+
+            <Button
+                android:id="@+id/btnGerarPdf"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="1"
+                android:text="GERAR PDF"
+                android:layout_marginStart="4dp"
+                android:backgroundTint="#1A73E8"
+                android:textSize="12sp"/>
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnCompartilhar"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="8dp"
+            android:text="COMPARTILHAR ÚLTIMO PDF"
+            android:backgroundTint="#FF9800"
+            android:visibility="visible"
+            android:textSize="12sp"/>
+
+        <!-- LISTA DE VIAGENS ADICIONADAS -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Viagens do Dia:"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="4dp" />
+
+        <LinearLayout
+            android:id="@+id/containerViagens"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <Button
+            android:id="@+id/btnReset"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="LIMPAR TUDO / NOVO DIA"
+            android:backgroundTint="#F44336"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp"
+            android:text="Aplicativo criado por Luiz Gustavo"
+            android:textColor="#888888"
+            android:textSize="11sp"
+            android:textStyle="italic" />
+
+    </LinearLayout>
+</ScrollView>

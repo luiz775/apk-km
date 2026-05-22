@@ -10,6 +10,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
@@ -22,6 +23,9 @@ class ConsumoActivity : AppCompatActivity() {
     private lateinit var containerConsumo: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val themePrefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val savedTheme = themePrefs.getInt("tema_preferido", AppCompatDelegate.MODE_NIGHT_YES)
+        AppCompatDelegate.setDefaultNightMode(savedTheme)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_consumo)
 

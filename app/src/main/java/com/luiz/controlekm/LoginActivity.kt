@@ -7,6 +7,7 @@ import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 
@@ -15,6 +16,9 @@ class LoginActivity : AppCompatActivity() {
     private val auth by lazy { Firebase.auth }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val themePrefs = getSharedPreferences("DadosApp", MODE_PRIVATE)
+        val savedTheme = themePrefs.getInt("tema_preferido", AppCompatDelegate.MODE_NIGHT_YES)
+        AppCompatDelegate.setDefaultNightMode(savedTheme)
         super.onCreate(savedInstanceState)
 
         // Se já estiver logado, vai direto para a MainActivity

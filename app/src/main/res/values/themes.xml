@@ -1,25 +1,24 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Base.Theme.ControleKM" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <!-- Let Material3 handle colors based on @color resources -->
     </style>
 
     <style name="Theme.ControleKM" parent="Base.Theme.ControleKM">
         <item name="bottomSheetDialogTheme">@style/CustomBottomSheetDialog</item>
     </style>
 
-    <style name="Theme.CustomPopupMenu" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme_CustomPopupMenu" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:popupBackground">@drawable/bg_popup_menu</item>
         <item name="android:textColor">@color/text_main</item>
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>
 
-    <style name="CustomBottomSheetDialog" parent="Theme.Design.Light.BottomSheetDialog">
+    <style name="CustomBottomSheetDialog" parent="Theme.Material3.DayNight.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/CustomBottomSheetStyle</item>
     </style>
 
-    <style name="CustomBottomSheetStyle" parent="Widget.Design.BottomSheet.Modal">
+    <style name="CustomBottomSheetStyle" parent="Widget.Material3.BottomSheet.Modal">
         <item name="android:background">@android:color/transparent</item>
     </style>
 </resources>

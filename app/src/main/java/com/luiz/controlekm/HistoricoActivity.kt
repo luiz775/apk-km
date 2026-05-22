@@ -7,6 +7,7 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
@@ -27,6 +28,9 @@ class HistoricoActivity : AppCompatActivity() {
     private lateinit var txtFiltroAtivo: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val themePrefs = getSharedPreferences("DadosApp", MODE_PRIVATE)
+        val savedTheme = themePrefs.getInt("tema_preferido", AppCompatDelegate.MODE_NIGHT_YES)
+        AppCompatDelegate.setDefaultNightMode(savedTheme)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_historico)
 

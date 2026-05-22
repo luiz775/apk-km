@@ -145,6 +145,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtViagensCount: TextView
     private lateinit var mainScrollView: ScrollView
     
+    // Banner treinamento
+    private lateinit var bannerTreinamento: TextView
+    
     // Novas referências para feedback visual fotos
     private lateinit var iconIda: TextView
     private lateinit var iconVolta: TextView
@@ -489,7 +492,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val themePrefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
-        val savedTheme = themePrefs.getInt("tema_preferido", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+        val savedTheme = themePrefs.getInt("tema_preferido", AppCompatDelegate.MODE_NIGHT_YES)
         AppCompatDelegate.setDefaultNightMode(savedTheme)
 
         super.onCreate(savedInstanceState)
@@ -536,6 +539,7 @@ class MainActivity : AppCompatActivity() {
         txtOlaUsuario = findViewById(R.id.txtOlaUsuario)
         txtViagensCount = findViewById(R.id.txtViagensCount)
         mainScrollView = findViewById(R.id.mainScrollView)
+        bannerTreinamento = findViewById(R.id.bannerTreinamento)
         
         iconIda = findViewById(R.id.iconIda)
         iconVolta = findViewById(R.id.iconVolta)
@@ -1447,6 +1451,11 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         isAppForeground = true
         
+        // Verifica Modo Treinamento
+        val prefsApp = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val isTreinamento = prefsApp.getBoolean("modo_treinamento", false)
+        bannerTreinamento.visibility = if (isTreinamento) View.VISIBLE else View.GONE
+
         // Atualiza o KM Inicial se estiver vazio (ex: após configurar o veículo ou limpar dados)
         if (editKmInicial.text.isNullOrEmpty()) {
             val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
@@ -1470,11 +1479,10 @@ class MainActivity : AppCompatActivity() {
         val snackbar = Snackbar.make(findViewById(android.R.id.content), "", 4000)
         val customView = layoutInflater.inflate(R.layout.layout_toast_custom, null)
         
-        val snackbarLayout = snackbar.view as Snackbar.SnackbarLayout
-        snackbarLayout.setBackgroundColor(Color.TRANSPARENT)
-        snackbarLayout.setPadding(0, 0, 0, 0)
+        val snackbarView = snackbar.view
+        snackbarView.setBackgroundColor(Color.TRANSPARENT)
+        snackbarView.setPadding(0, 0, 0, 0)
         
-        val container = customView.findViewById<LinearLayout>(R.id.toast_container)
         val icon = customView.findViewById<TextView>(R.id.toast_icon)
         val txtTitle = customView.findViewById<TextView>(R.id.toast_title)
         val txtSubtitle = customView.findViewById<TextView>(R.id.toast_subtitle)
@@ -1497,17 +1505,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        snackbarLayout.addView(customView, 0)
+        (snackbarView as? ViewGroup)?.addView(customView, 0)
 
         // Posicionar no topo respeitando a status bar
-        val params = snackbarLayout.layoutParams as FrameLayout.LayoutParams
+        val params = snackbarView.layoutParams as FrameLayout.LayoutParams
         params.gravity = Gravity.TOP
         
         val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
         val statusBarHeight = if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
         params.topMargin = statusBarHeight + (16 * resources.displayMetrics.density).toInt()
         
-        snackbarLayout.layoutParams = params
+        snackbarView.layoutParams = params
 
         // Animações customizadas
         customView.startAnimation(AnimationUtils.loadAnimation(this, R.anim.toast_slide_down_in))
@@ -1726,116 +1734,200 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun mostrarMenuConfiguracoes(view: View) {
-        // Criar um wrapper com o tema personalizado para o menu
-        val wrapper = androidx.appcompat.view.ContextThemeWrapper(this, R.style.Theme_CustomPopupMenu)
-        val popup = PopupMenu(wrapper, view)
-        popup.menu.add("Informações do Veículo")
-        popup.menu.add("Histórico de Viagens")
-        popup.menu.add("Histórico de Consumo")
-        popup.menu.add("Sincronizar Dados")
-        popup.menu.add("Reenviar Último Lote")
-        popup.menu.add("Ver Histórico de Sincronizações")
-        popup.menu.add("Exportar dados para PDF")
-        popup.menu.add("Sair da Conta")
+        val dialog = BottomSheetDialog(this, R.style.CustomBottomSheetDialog)
+        val menuView = layoutInflater.inflate(R.layout.layout_bottom_sheet_settings, null)
+        dialog.setContentView(menuView)
 
-        popup.setOnMenuItemClickListener { item ->
-            when (item.title) {
-                "Informações do Veículo" -> {
-                    startActivity(Intent(this, VeiculoActivity::class.java))
-                }
-                "Histórico de Viagens" -> {
-                    startActivity(Intent(this, HistoricoActivity::class.java))
-                }
-                "Histórico de Consumo" -> {
-                    startActivity(Intent(this, ConsumoActivity::class.java))
-                }
-                "Sincronizar Dados" -> {
-                    sincronizarViagensComFirestore()
-                }
-                "Reenviar Último Lote" -> {
-                    reenviarUltimoLote()
-                }
-                "Ver Histórico de Sincronizações" -> {
-                    mostrarHistoricoLogs()
-                }
-                "Exportar dados para PDF" -> {
-                    val currentUser = auth.currentUser
-                    if (currentUser == null) {
-                        Toast.makeText(this, "Faça login para exportar o histórico!", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this, "Buscando histórico na nuvem...", Toast.LENGTH_SHORT).show()
-                        
-                        val query = db.collection("viagens").whereEqualTo("tecnicoId", currentUser.uid)
-
-                        query.get()
-                            .addOnSuccessListener { documents ->
-                                if (documents.isEmpty) {
-                                    Toast.makeText(this, "Nenhuma viagem encontrada no histórico.", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    val viagensHistorico = mutableListOf<Viagem>()
-                                    for (doc in documents) {
-                                        viagensHistorico.add(Viagem(
-                                            doc.getString("data") ?: "",
-                                            doc.getString("condutor") ?: "",
-                                            doc.getString("origem") ?: "",
-                                            doc.getString("destino") ?: "",
-                                            doc.getString("hSaida") ?: "",
-                                            doc.getString("hChegada") ?: "",
-                                            doc.get("kmIni").toString().toIntOrNull() ?: 0,
-                                            doc.get("kmFin").toString().toIntOrNull() ?: 0,
-                                            doc.get("custo").toString().toDoubleOrNull() ?: 0.0,
-                                            doc.getString("observacoes") ?: "",
-                                            doc.getBoolean("isEmpresa") ?: false
-                                        ))
-                                    }
-                                    // Ordena por data (opcional, já que o PDF organiza na ordem da lista)
-                                    gerarRelatorioCompleto(viagensHistorico, isExportacaoHistorico = true)
-                                }
-                            }
-                            .addOnFailureListener { e ->
-                                Toast.makeText(this, "Erro ao buscar histórico: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                    }
-                }
-                "Sair da Conta" -> {
-                    // Limpeza radical antes de sair
-                    listaDeViagens.clear()
-                    listaFotosDespesas.clear()
-                    listaDadosDespesas.clear()
-                    fotoIdaPath = null
-                    fotoVoltaPath = null
-                    fotoIdaHora = null
-                    fotoVoltaHora = null
-                    
-                    val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
-                    prefs.edit()
-                        .remove("lista_viagens")
-                        .remove("listaFotosDespesas")
-                        .remove("listaDadosDespesas")
-                        .remove("fotoIdaPath")
-                        .remove("fotoVoltaPath")
-                        .remove("rascunho_data")
-                        .remove("rascunho_origem")
-                        .remove("rascunho_destino")
-                        .remove("rascunho_kmIni")
-                        .remove("rascunho_obs")
-                        .remove("rascunho_condutor")
-                        .apply()
-                    
-                    val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
-                    prefsVeiculo.edit().clear().apply()
-
-                    auth.signOut()
-                    startActivity(Intent(this, LoginActivity::class.java))
-                    finish()
-                }
-            }
-            true
+        // Atualizar nome no menu
+        val txtOla = menuView.findViewById<TextView>(R.id.txtOlaMenu)
+        val nomeCondutor = editCondutor.text.toString().trim()
+        if (nomeCondutor.isNotEmpty()) {
+            txtOla.text = "Olá, $nomeCondutor"
         }
-        popup.show()
+
+        val prefsApp = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val isTreinamento = prefsApp.getBoolean("modo_treinamento", false)
+
+        val itemTreinamento = menuView.findViewById<View>(R.id.itemMenuTreinamento)
+        val titleT = menuView.findViewById<TextView>(R.id.titleTreinamento)
+        
+        if (isTreinamento) {
+            titleT.text = "Modo Treinamento (ATIVO)"
+            titleT.setTextColor(Color.parseColor("#FFC107"))
+        }
+
+        itemTreinamento.setOnClickListener {
+            dialog.dismiss()
+            ativarDesativarTreinamento(!isTreinamento)
+        }
+
+        // --- CLIQUES DOS ITENS ---
+
+        // Dados do Veículo
+        menuView.findViewById<View>(R.id.itemMenuVeiculo).setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(this, VeiculoActivity::class.java))
+        }
+        menuView.findViewById<View>(R.id.itemMenuConsumo).setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(this, ConsumoActivity::class.java))
+        }
+
+        // Viagens
+        menuView.findViewById<View>(R.id.itemMenuViagens).setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(this, HistoricoActivity::class.java))
+        }
+        menuView.findViewById<View>(R.id.itemMenuSinc).setOnClickListener {
+            dialog.dismiss()
+            sincronizarViagensComFirestore()
+        }
+
+        // ITEM NOVO: Ver Histórico de Sincronizações
+        menuView.findViewById<View>(R.id.itemMenuLogs).setOnClickListener {
+            dialog.dismiss()
+            mostrarHistoricoLogs()
+        }
+
+        // ITEM NOVO: Exportar para PDF
+        menuView.findViewById<View>(R.id.itemMenuExportarPdf).setOnClickListener {
+            dialog.dismiss()
+            
+            val currentUser = auth.currentUser
+            if (currentUser == null) {
+                Toast.makeText(this, "Faça login para exportar o histórico!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Buscando histórico na nuvem...", Toast.LENGTH_SHORT).show()
+                
+                val query = db.collection("viagens").whereEqualTo("tecnicoId", currentUser.uid)
+
+                query.get()
+                    .addOnSuccessListener { documents ->
+                        if (documents.isEmpty) {
+                            Toast.makeText(this, "Nenhuma viagem encontrada no histórico.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            val viagensHistorico = mutableListOf<Viagem>()
+                            for (doc in documents) {
+                                viagensHistorico.add(Viagem(
+                                    doc.getString("data") ?: "",
+                                    doc.getString("condutor") ?: "",
+                                    doc.getString("origem") ?: "",
+                                    doc.getString("destino") ?: "",
+                                    doc.getString("hSaida") ?: "",
+                                    doc.getString("hChegada") ?: "",
+                                    doc.get("kmIni").toString().toIntOrNull() ?: 0,
+                                    doc.get("kmFin").toString().toIntOrNull() ?: 0,
+                                    doc.get("custo").toString().toDoubleOrNull() ?: 0.0,
+                                    doc.getString("observacoes") ?: "",
+                                    doc.getBoolean("isEmpresa") ?: false
+                                ))
+                            }
+                            gerarRelatorioCompleto(viagensHistorico, isExportacaoHistorico = true)
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        reportarErro(e, "Erro ao buscar histórico para PDF")
+                    }
+            }
+        }
+
+        // App
+        menuView.findViewById<View>(R.id.itemMenuReenviar).setOnClickListener {
+            dialog.dismiss()
+            reenviarUltimoLote()
+        }
+        menuView.findViewById<View>(R.id.itemMenuSair).setOnClickListener {
+            dialog.dismiss()
+            // Lógica de logout já existente (copiada do antigo popup)
+            listaDeViagens.clear()
+            listaFotosDespesas.clear()
+            listaDadosDespesas.clear()
+            fotoIdaPath = null
+            fotoVoltaPath = null
+            fotoIdaHora = null
+            fotoVoltaHora = null
+            
+            val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+            prefs.edit()
+                .remove("lista_viagens")
+                .remove("listaFotosDespesas")
+                .remove("listaDadosDespesas")
+                .remove("fotoIdaPath")
+                .remove("fotoVoltaPath")
+                .remove("rascunho_data")
+                .remove("rascunho_origem")
+                .remove("rascunho_destino")
+                .remove("rascunho_kmIni")
+                .remove("rascunho_obs")
+                .remove("rascunho_condutor")
+                .apply()
+            
+            val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
+            prefsVeiculo.edit().clear().apply()
+
+            auth.signOut()
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+        }
+
+        // --- BLOQUEIOS MODO TREINAMENTO ---
+        if (isTreinamento) {
+            menuView.findViewById<View>(R.id.itemMenuReenviar).apply {
+                isEnabled = false
+                alpha = 0.5f
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun ativarDesativarTreinamento(ativar: Boolean) {
+        val titulo = if (ativar) "Ativar Modo Treinamento?" else "Desativar Modo Treinamento?"
+        val msg = if (ativar) "Neste modo, os dados NÃO serão salvos na nuvem ou na planilha. Ideal para testes." 
+                  else "Deseja voltar ao modo normal e salvar os dados na nuvem?"
+
+        AlertDialog.Builder(this)
+            .setTitle(titulo)
+            .setMessage(msg)
+            .setPositiveButton(if (ativar) "Ativar" else "Desativar") { _, _ ->
+                val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+                prefs.edit().putBoolean("modo_treinamento", ativar).apply()
+                bannerTreinamento.visibility = if (ativar) View.VISIBLE else View.GONE
+                
+                if (!ativar) {
+                    // Pergunta se quer limpar dados ao desativar
+                    AlertDialog.Builder(this)
+                        .setTitle("Limpar Dados de Teste?")
+                        .setMessage("Deseja apagar os registros feitos durante o treinamento?")
+                        .setPositiveButton("Sim, Limpar") { _, _ ->
+                            listaDeViagens.clear()
+                            listaFotosDespesas.clear()
+                            listaDadosDespesas.clear()
+                            fotoIdaPath = null
+                            fotoVoltaPath = null
+                            atualizarListaVisual()
+                            salvarEstado()
+                        }
+                        .setNegativeButton("Manter", null)
+                        .show()
+                }
+                
+                Toast.makeText(this, if (ativar) "Modo Treinamento Ativado" else "Modo Normal Ativado", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun sincronizarViagensComFirestore() {
+        val prefsApp = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val isTreinamento = prefsApp.getBoolean("modo_treinamento", false)
+
+        if (isTreinamento) {
+            Toast.makeText(this, "🎓 Modo treinamento - sincronização simulada", Toast.LENGTH_SHORT).show()
+            salvarLog("Sucesso (TREINAMENTO)", "Sincronização simulada com sucesso", listaDeViagens.size, "TRAINING_MODE")
+            return
+        }
+
         val currentUser = auth.currentUser
         if (currentUser == null) {
             Toast.makeText(this, "Faça login para sincronizar os dados!", Toast.LENGTH_SHORT).show()
@@ -1891,6 +1983,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun salvarNaPlanilhaGoogle(viagens: List<Viagem>, despesas: List<Despesa> = emptyList(), loteIdExterno: String? = null) {
+        val prefsApp = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val isTreinamento = prefsApp.getBoolean("modo_treinamento", false)
+
+        if (isTreinamento) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                mostrarNotificacaoStatus("Sincronização Simulada", "Dados de treinamento processados", true)
+                mostrarToastCustom("Sucesso (TREINAMENTO)", "Os dados foram simulados com sucesso.", "OK")
+            }, 1000)
+            return
+        }
+
         val scriptUrl = "https://script.google.com/macros/s/AKfycbz-vPT7DHjux2zBzc2PAo6a3O99rb4aE70xjdWVtcnNIbR00S1045Fa15lwe-J58Yhs/exec"
         
         if (scriptUrl.isEmpty() || scriptUrl.contains("SUA_URL")) return
@@ -2394,6 +2497,10 @@ class MainActivity : AppCompatActivity() {
         return maiorYOffset
     }
 
+    private fun Int.dpToPx(): Int {
+        return (this * resources.displayMetrics.density).toInt()
+    }
+
     private fun gerarRelatorioCompleto(viagens: List<Viagem>, isExportacaoHistorico: Boolean = false) {
         val document = PdfDocument()
         val paint = Paint()
@@ -2631,6 +2738,18 @@ class MainActivity : AppCompatActivity() {
             paint.isFakeBoldText = false
             paint.textAlign = Paint.Align.RIGHT
             canvas.drawText("Aplicativo criado por Luiz Gustavo", 575f, 825f, paint)
+
+            // Marca d'água treinamento
+            val isTreinamento = getSharedPreferences("DadosApp", Context.MODE_PRIVATE).getBoolean("modo_treinamento", false)
+            if (isTreinamento) {
+                paint.color = Color.RED
+                paint.textSize = 14f
+                paint.alpha = 150
+                paint.textAlign = Paint.Align.CENTER
+                paint.isFakeBoldText = true
+                canvas.drawText("VERSÃO DE TREINAMENTO", 300f, 825f, paint)
+            }
+
             document.finishPage(page)
 
             val pasta = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)

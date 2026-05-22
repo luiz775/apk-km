@@ -54,7 +54,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Filtro: Todos"
-        android:textColor="#00E676"
+        android:textColor="@color/accent_green"
         android:textSize="12sp"
         android:gravity="center"
         android:layout_marginBottom="8dp"
@@ -84,8 +84,8 @@
         android:layout_width="match_parent"
         android:layout_height="60dp"
         android:layout_marginTop="16dp"
-        android:backgroundTint="#444444"
+        android:backgroundTint="@color/surface2"
         android:text="VOLTAR"
-        android:textColor="#FFFFFF" />
+        android:textColor="@color/text_main" />
 
 </LinearLayout>

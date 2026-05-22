@@ -19,7 +19,8 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/kmcontroll_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.ControleKM">
+        android:theme="@style/Theme.ControleKM"
+        android:forceDarkAllowed="false">
         <activity
             android:name=".HistoricoActivity"
             android:exported="false" />
