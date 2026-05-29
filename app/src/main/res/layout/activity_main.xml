@@ -85,6 +85,32 @@
                         android:textStyle="bold"
                         android:letterSpacing="0.05"
                         android:layout_marginTop="8dp" />
+
+                    <TextView
+                        android:id="@+id/txtIndicadorViagem"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🟡 Viagem em andamento desde --/--"
+                        android:textColor="#FFA000"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="4dp"
+                        android:visibility="gone"
+                        android:clickable="true"
+                        android:focusable="true" />
+
+                    <TextView
+                        android:id="@+id/txtIndicadorFila"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🟡 0 envios pendentes"
+                        android:textColor="#FFA000"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="2dp"
+                        android:visibility="gone"
+                        android:clickable="true"
+                        android:focusable="true" />
                 </LinearLayout>
 
                 <ImageButton
@@ -790,9 +816,20 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/txtVersaoRodape"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="8dp"
+                android:text="v1.0.1"
+                android:textColor="#6c6c75"
+                android:textSize="11sp"
+                android:gravity="center"
+                android:letterSpacing="0.05" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:text="Aplicativo criado por Luiz Gustavo"
                 android:textColor="#33F0F0F5"
                 android:textSize="10sp"

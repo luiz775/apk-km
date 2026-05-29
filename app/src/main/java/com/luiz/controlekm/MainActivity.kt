@@ -1,7 +1,6 @@
 package com.luiz.controlekm
 
 import android.Manifest
-import android.app.Activity
 import android.app.AlertDialog
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -12,6 +11,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.*
 import android.graphics.pdf.PdfDocument
+import android.location.Address
 import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
@@ -40,6 +40,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
 import androidx.core.graphics.toColorInt
+import androidx.work.*
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import com.google.android.material.snackbar.Snackbar
 import android.view.ViewGroup
 import android.view.Gravity
@@ -168,6 +171,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtCountIda: TextView
     private lateinit var txtCountVolta: TextView
     private lateinit var txtCountDespesa: TextView
+    private lateinit var txtIndicadorViagem: TextView
+    private lateinit var txtIndicadorFila: TextView
+    private lateinit var txtVersaoRodape: TextView
     
     private lateinit var btnGpsOrigem: ImageButton
     private lateinit var btnGpsDestino: ImageButton
@@ -177,6 +183,20 @@ class MainActivity : AppCompatActivity() {
 
     private val crashlytics by lazy { FirebaseCrashlytics.getInstance() }
 
+    private val filaReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            atualizarIndicadorFila()
+        }
+    }
+
+    private val handlerIndicador = Handler(Looper.getMainLooper())
+    private val runnableIndicador = object : Runnable {
+        override fun run() {
+            atualizarIndicadorFila()
+            handlerIndicador.postDelayed(this, 3000)
+        }
+    }
+
     private fun reportarErro(e: Exception, contexto: String) {
         try {
             crashlytics.log("Contexto Erro: $contexto")
@@ -184,7 +204,330 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 Toast.makeText(this, "Erro: $contexto", Toast.LENGTH_SHORT).show()
             }
-        } catch (ex: Exception) { e.printStackTrace() }
+        } catch (ex: Exception) { ex.printStackTrace() }
+    }
+
+    private fun limparTudoAposSincronizacao() {
+        runOnUiThread {
+            listaDeViagens.clear()
+            listaDadosDespesas.clear()
+            listaFotosDespesas.clear()
+            
+            fotoIdaPath = null
+            fotoVoltaPath = null
+            fotoIdaHora = null
+            fotoVoltaHora = null
+            
+            // Limpa campos visuais
+            editData.setText("")
+            editOrigem.setText("")
+            editDestino.setText("")
+            editHoraSaida.setText("")
+            editHoraChegada.setText("")
+            editKmInicial.setText("")
+            editKmFinal.setText("")
+            editObservacoes.setText("")
+            
+            // Reseta botões de foto
+            iconIda.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1AFFFFFF"))
+            subLblFotoIda.text = "Toque para capturar"
+            subLblFotoIda.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
+            btnFotoIda.alpha = 0.5f
+            
+            iconVolta.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1AFFFFFF"))
+            subLblFotoVolta.text = "Toque para capturar"
+            subLblFotoVolta.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
+            btnFotoVolta.apply { alpha = 0.5f; isEnabled = false }
+            
+            btnFotoDespesa.apply { alpha = 0.5f; isEnabled = false }
+            
+            // Limpa SharedPreferences
+            getSharedPreferences("DadosApp", MODE_PRIVATE).edit().apply {
+                remove("lista_viagens")
+                remove("listaFotosDespesas")
+                remove("listaDadosDespesas")
+                remove("fotoIdaPath")
+                remove("fotoVoltaPath")
+                remove("rascunho_data")
+                remove("rascunho_origem")
+                remove("rascunho_destino")
+                remove("rascunho_obs")
+                remove("rascunho_kmIni")
+                remove("rascunho_hSaida")
+                remove("rascunho_hChegada")
+            }.apply()
+            
+            atualizarListaVisual()
+            atualizarDashboard()
+            validarBotoes()
+            atualizarIndicadorViagem()
+            
+            Toast.makeText(this, "✅ Sincronizado! App pronto para nova viagem", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun verificarDadosAntigos() {
+        val prefs = getSharedPreferences("DadosApp", MODE_PRIVATE)
+        val rascunhoData = prefs.getString("rascunho_data", "") ?: ""
+        
+        if (rascunhoData.isNotEmpty()) {
+            try {
+                val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                val dataSalva = sdf.parse(rascunhoData)
+                val hojeStr = sdf.format(Date())
+                val hoje = sdf.parse(hojeStr)
+                
+                if (dataSalva != null && hoje != null && dataSalva.before(hoje)) {
+                    AlertDialog.Builder(this)
+                        .setTitle("⚠️ Viagem anterior detectada")
+                        .setMessage("Encontramos dados de uma viagem do dia $rascunhoData não enviada.\n\nSe você já enviou essa viagem por outro caminho, limpe os dados.\nSe ainda não enviou, mantenha-os e finalize agora.")
+                        .setCancelable(false)
+                        .setPositiveButton("Manter dados") { d, _ -> d.dismiss() }
+                        .setNegativeButton("Limpar e começar nova") { _, _ -> 
+                            resetTotalManual() 
+                        }
+                        .show()
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    private fun atualizarIndicadorViagem() {
+        val prefs = getSharedPreferences("DadosApp", MODE_PRIVATE)
+        val rascunhoData = prefs.getString("rascunho_data", "") ?: ""
+        val hojeStr = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
+        
+        if (rascunhoData.isNotEmpty() && rascunhoData != hojeStr) {
+            val dataCurta = if (rascunhoData.length >= 5) rascunhoData.substring(0, 5) else rascunhoData
+            txtIndicadorViagem.text = "🟡 Viagem em andamento desde $dataCurta"
+            txtIndicadorViagem.visibility = View.VISIBLE
+            txtIndicadorViagem.setOnClickListener { verificarDadosAntigos() }
+        } else {
+            txtIndicadorViagem.visibility = View.GONE
+        }
+    }
+
+    private fun resetTotalManual() {
+        listaDeViagens.clear()
+        listaFotosDespesas.clear()
+        listaDadosDespesas.clear()
+        fotoIdaPath = null
+        fotoVoltaPath = null
+        fotoIdaHora = null
+        fotoVoltaHora = null
+
+        // Limpa campos
+        editData.setText("")
+        editOrigem.setText("")
+        editDestino.setText("")
+        editHoraSaida.setText("")
+        editHoraChegada.setText("")
+        editKmInicial.setText("")
+        editKmFinal.setText("")
+        editObservacoes.setText("")
+
+        // Reseta visuais
+        iconIda.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1AFFFFFF"))
+        subLblFotoIda.text = "Toque para capturar"
+        btnFotoIda.alpha = 0.5f
+
+        iconVolta.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1AFFFFFF"))
+        subLblFotoVolta.text = "Toque para capturar"
+        btnFotoVolta.apply { alpha = 0.5f; isEnabled = false }
+        btnFotoDespesa.apply { alpha = 0.5f; isEnabled = false }
+
+        salvarEstado()
+        atualizarListaVisual()
+        atualizarDashboard()
+        validarBotoes()
+        atualizarIndicadorViagem()
+        Toast.makeText(this, "Tudo limpo!", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun adicionarNaFilaPendente(loteId: String, viagens: List<Viagem>, despesas: List<Despesa>) {
+        val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val filaJson = prefs.getString("fila_pendente", "[]")
+        try {
+            val filaArray = JSONArray(filaJson)
+            
+            // Converte listas para JSON strings para armazenamento fácil no item da fila
+            val arrayV = JSONArray()
+            viagens.forEach { v ->
+                arrayV.put(JSONObject().apply {
+                    put("data", v.data); put("condutor", v.condutor); put("origem", v.origem); put("destino", v.destino)
+                    put("hSaida", v.hSaida); put("hChegada", v.hChegada)
+                    put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
+                    put("observacoes", v.observacoes); put("isEmpresa", v.isEmpresa)
+                })
+            }
+            
+            val arrayD = JSONArray()
+            despesas.forEach { d ->
+                arrayD.put(JSONObject().apply {
+                    put("path", d.path); put("categoria", d.categoria); put("valor", d.valor)
+                })
+            }
+
+            val item = JSONObject().apply {
+                put("loteId", loteId)
+                put("viagens", arrayV.toString())
+                put("despesas", arrayD.toString())
+                put("timestamp", System.currentTimeMillis())
+                put("tentativas", 0)
+            }
+            
+            filaArray.put(item)
+            prefs.edit().putString("fila_pendente", filaArray.toString())
+                .putLong("ultima_adicao_fila", System.currentTimeMillis())
+                .apply()
+            
+            runOnUiThread {
+                atualizarIndicadorFila()
+                agendarWorkerImediato()
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    private fun atualizarIndicadorFila() {
+        val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val filaJson = prefs.getString("fila_pendente", "[]") ?: "[]"
+        val count = try { JSONArray(filaJson).length() } catch (e: Exception) { 0 }
+        
+        runOnUiThread {
+            if (count > 0) {
+                txtIndicadorFila.text = String.format(Locale.forLanguageTag("pt-BR"), "🟡 %d envio(s) pendente(s)", count)
+                txtIndicadorFila.visibility = View.VISIBLE
+                txtIndicadorFila.setOnClickListener { mostrarDialogoFilaPendente() }
+            } else {
+                txtIndicadorFila.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun mostrarDialogoFilaPendente() {
+        val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val filaJson = prefs.getString("fila_pendente", "[]")
+        val filaArray = JSONArray(filaJson)
+        
+        val items = mutableListOf<String>()
+        for (i in 0 until filaArray.length()) {
+            val item = filaArray.getJSONObject(i)
+            items.add("Lote: ${item.getString("loteId")} (Tentativas: ${item.getInt("tentativas")})")
+        }
+        
+        AlertDialog.Builder(this)
+            .setTitle("Envios Pendentes (Fila)")
+            .setItems(items.toTypedArray(), null)
+            .setPositiveButton("Fechar", null)
+            .setNeutralButton("Tentar Agora") { _, _ -> agendarWorkerImediato() }
+            .show()
+    }
+
+    private fun agendarSyncWorker() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val periodicWork = PeriodicWorkRequestBuilder<SyncWorker>(15, java.util.concurrent.TimeUnit.MINUTES)
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "SyncWorkerPeriodic",
+            ExistingPeriodicWorkPolicy.KEEP,
+            periodicWork
+        )
+    }
+
+    private fun agendarWorkerImediato() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val oneTimeWork = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniqueWork(
+            "SyncWorkerImmediate",
+            ExistingWorkPolicy.KEEP,
+            oneTimeWork
+        )
+    }
+
+    private fun marcarLoteComoEnviado(loteId: String) {
+        val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        
+        synchronized(MainActivity::class.java) {
+            // 1. Remove da fila_pendente
+            val filaJson = prefs.getString("fila_pendente", "[]") ?: "[]"
+            val filaArray = JSONArray(filaJson)
+            val novaFila = JSONArray()
+            var mudouFila = false
+            for (i in 0 until filaArray.length()) {
+                val item = filaArray.getJSONObject(i)
+                if (item.optString("loteId") != loteId) {
+                    novaFila.put(item)
+                } else {
+                    mudouFila = true
+                }
+            }
+            if (mudouFila) {
+                prefs.edit().putString("fila_pendente", novaFila.toString()).apply()
+            }
+            
+            // 2. Adiciona ao Set de lotes enviados (deduplicação)
+            val enviados = (prefs.getStringSet("lotes_ja_enviados", emptySet()) ?: emptySet()).toMutableSet()
+            enviados.add(loteId)
+            // Limita a 100 últimos
+            if (enviados.size > 100) {
+                val lista = enviados.toList().takeLast(100)
+                prefs.edit().putStringSet("lotes_ja_enviados", lista.toSet()).apply()
+            } else {
+                prefs.edit().putStringSet("lotes_ja_enviados", enviados).apply()
+            }
+            
+            // 3. Cancela notificações relacionadas
+            val notifManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notifManager.cancel(loteId.hashCode())
+            notifManager.cancel(1001) // Geral Worker
+            notifManager.cancel(1002) // Em espera
+            notifManager.cancel(1003) // Backup
+            notifManager.cancel(1004) // Sucesso
+            
+            // 4. Atualiza indicador visual
+            runOnUiThread {
+                atualizarIndicadorFila()
+            }
+        }
+    }
+
+    private fun salvarCopiaParaReenvio(viagens: List<Viagem>, despesas: List<Despesa>) {
+        val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        
+        val arrayV = JSONArray()
+        viagens.forEach { v ->
+            val obj = JSONObject().apply {
+                put("data", v.data); put("condutor", v.condutor); put("origem", v.origem); put("destino", v.destino)
+                put("hSaida", v.hSaida); put("hChegada", v.hChegada)
+                put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
+                put("observacoes", v.observacoes); put("isEmpresa", v.isEmpresa)
+            }
+            arrayV.put(obj)
+        }
+        
+        val arrayD = JSONArray()
+        despesas.forEach { d ->
+            val obj = JSONObject().apply {
+                put("path", d.path); put("categoria", d.categoria); put("valor", d.valor)
+            }
+            arrayD.put(obj)
+        }
+        
+        prefs.edit()
+            .putString("ultimo_lote_enviado", arrayV.toString())
+            .putString("ultimo_despesas_lote", arrayD.toString())
+            .apply()
     }
 
     private val CHANNEL_ID = "sync_channel_controlekm"
@@ -205,7 +548,7 @@ class MainActivity : AppCompatActivity() {
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
     private val scannerLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
+        if (result.resultCode == RESULT_OK) {
             val scanningResult = GmsDocumentScanningResult.fromActivityResultIntent(result.data)
             scanningResult?.pages?.get(0)?.imageUri?.let { uri ->
                 mostrarDialogoConfirmacaoScanner(uri)
@@ -277,7 +620,6 @@ class MainActivity : AppCompatActivity() {
         dialog.setContentView(view)
 
         val txtTitulo = view.findViewById<TextView>(R.id.txtTituloDespesa)
-        val spinner = view.findViewById<Spinner>(R.id.spinnerCategoria)
         val inputValor = view.findViewById<EditText>(R.id.inputValorDespesa)
         val btnConfirmar = view.findViewById<Button>(R.id.btnConfirmarDespesa)
         val btnCancelar = view.findViewById<Button>(R.id.btnCancelarDespesa)
@@ -317,7 +659,7 @@ class MainActivity : AppCompatActivity() {
         btnConfirmar.setOnClickListener {
             val valorNovoTexto = inputValor.text.toString()
             if (valorNovoTexto.isNotEmpty()) {
-                val prefs = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
+                val prefs = getSharedPreferences("DadosVeiculo", MODE_PRIVATE)
                 
                 // 1. Pega o valor que já estava salvo
                 val valorAntigoTexto = prefs.getString("veiculo_gasto_combustivel", "0,00") ?: "0,00"
@@ -337,7 +679,7 @@ class MainActivity : AppCompatActivity() {
                 // Salva também no histórico datado para o Histórico de Consumo
                 val currentUser = auth.currentUser
                 val fuelKey = if (currentUser != null) "historico_combustivel_local_${currentUser.uid}" else "historico_combustivel_geral"
-                val prefsApp = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+                val prefsApp = getSharedPreferences("DadosApp", MODE_PRIVATE)
                 val historicoComb = prefsApp.getString(fuelKey, "[]")
                 val arrayFuel = JSONArray(historicoComb)
                 val dataAtual = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
@@ -559,6 +901,9 @@ class MainActivity : AppCompatActivity() {
         txtCountIda = findViewById(R.id.txtCountIda)
         txtCountVolta = findViewById(R.id.txtCountVolta)
         txtCountDespesa = findViewById(R.id.txtCountDespesa)
+        txtIndicadorViagem = findViewById(R.id.txtIndicadorViagem)
+        txtIndicadorFila = findViewById(R.id.txtIndicadorFila)
+        txtVersaoRodape = findViewById(R.id.txtVersaoRodape)
         
         btnGpsOrigem = findViewById(R.id.btnGpsOrigem)
         btnGpsDestino = findViewById(R.id.btnGpsDestino)
@@ -982,6 +1327,9 @@ class MainActivity : AppCompatActivity() {
         btnGpsOrigem.setOnClickListener { preencherCidadeComGps(editOrigem) }
         btnGpsDestino.setOnClickListener { preencherCidadeComGps(editDestino) }
 
+        val versao = obterVersao()
+        txtVersaoRodape.text = "v${versao.first}"
+
         btnFotoIda.setOnClickListener { 
             pedindoFotoIda = true
             pedindoFotoDespesa = false
@@ -1162,63 +1510,17 @@ class MainActivity : AppCompatActivity() {
                 .setTitle("Limpar tudo / Novo Dia?")
                 .setMessage("Isso apagará as fotos e todos os registros da lista para iniciar um novo dia.")
                 .setPositiveButton("Sim, Limpar") { _, _ ->
-                    salvarCopiaUltimoLote() // SALVA ANTES DE LIMPAR
-
-                    fotoIdaPath?.let { File(it).delete() }
-                    fotoVoltaPath?.let { File(it).delete() }
-                    
-                    fotoIdaPath = null
-                    fotoVoltaPath = null
-                    fotoIdaHora = null
-                    fotoVoltaHora = null
-                    listaFotosDespesas.clear()
-                    listaDadosDespesas.clear()
-                    listaDeViagens.clear()
-                    
-                    editData.text.clear()
-                    editOrigem.text.clear()
-                    editDestino.text.clear()
-                    editObservacoes.text.clear()
-                    editHoraSaida.text.clear()
-                    editHoraChegada.text.clear()
-                    
-                    // Mantém o KM Inicial baseado no último hodômetro registrado
-                    val prefsVeiculo = getSharedPreferences("DadosVeiculo", Context.MODE_PRIVATE)
-                    editKmInicial.setText(prefsVeiculo.getString("veiculo_km_ini", ""))
-                    editKmFinal.text.clear()
-                    
-                    findViewById<RadioButton>(R.id.radioParticular).isChecked = true
-                    
-                    btnFotoIda.apply {
-                        alpha = 0.5f
-                    }
-                    iconIda.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1AFFFFFF"))
-                    subLblFotoIda.text = "Toque para capturar"
-                    subLblFotoIda.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
-
-                    btnFotoVolta.apply {
-                        alpha = 0.5f
-                        isEnabled = false
-                    }
-                    iconVolta.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1AFFFFFF"))
-                    subLblFotoVolta.text = "Toque para capturar"
-                    subLblFotoVolta.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
-                    btnFotoDespesa.apply {
-                        // text = "📸 ADICIONAR DESPESAS (RECIBOS)"
-                        alpha = 0.5f
-                        isEnabled = false
-                    }
-                    
-                    salvarEstado()
-                    atualizarListaVisual()
-                    atualizarDashboard()
-                    validarBotoes()
-                    Toast.makeText(this, "Tudo limpo!", Toast.LENGTH_SHORT).show()
+                    salvarCopiaParaReenvio(listaDeViagens, listaDadosDespesas) // SALVA ANTES DE LIMPAR
+                    resetTotalManual()
                 }
                 .setNegativeButton("Cancelar", null)
                 .show()
         }
         
+        verificarDadosAntigos()
+        atualizarIndicadorViagem()
+        atualizarIndicadorFila()
+        agendarSyncWorker()
         validarBotoes() // Chama no início
         atualizarDashboard()
         sincronizarDadosUsuario()
@@ -1349,7 +1651,7 @@ class MainActivity : AppCompatActivity() {
         input.layoutParams = params
         container.addView(input)
         
-        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID).takeLast(4).uppercase()
+        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)?.takeLast(4)?.uppercase() ?: "0000"
         val deviceMsg = "ID do Dispositivo: $androidId"
 
         AlertDialog.Builder(this)
@@ -1392,13 +1694,36 @@ class MainActivity : AppCompatActivity() {
             if (location != null) {
                 try {
                     val geocoder = Geocoder(this, Locale.getDefault())
-                    val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
-                    if (!addresses.isNullOrEmpty()) {
-                        val cidade = addresses[0].locality ?: addresses[0].subAdminArea ?: "Desconhecida"
-                        target.setText(cidade)
-                        salvarEstado()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        geocoder.getFromLocation(location.latitude, location.longitude, 1, object : Geocoder.GeocodeListener {
+                            override fun onGeocode(addresses: MutableList<Address>) {
+                                if (addresses.isNotEmpty()) {
+                                    val cidade = addresses[0].locality ?: addresses[0].subAdminArea ?: "Desconhecida"
+                                    runOnUiThread {
+                                        target.setText(cidade)
+                                        salvarEstado()
+                                    }
+                                } else {
+                                    runOnUiThread {
+                                        Toast.makeText(this@MainActivity, "Não foi possível encontrar a cidade.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            override fun onError(errorMessage: String?) {
+                                runOnUiThread {
+                                    Toast.makeText(this@MainActivity, "Erro ao obter cidade: $errorMessage", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        })
                     } else {
-                        Toast.makeText(this, "Não foi possível encontrar a cidade.", Toast.LENGTH_SHORT).show()
+                        val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+                        if (!addresses.isNullOrEmpty()) {
+                            val cidade = addresses[0].locality ?: addresses[0].subAdminArea ?: "Desconhecida"
+                            target.setText(cidade)
+                            salvarEstado()
+                        } else {
+                            Toast.makeText(this, "Não foi possível encontrar a cidade.", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -1456,6 +1781,14 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         isAppForeground = true
         
+        val filter = IntentFilter("FILA_ATUALIZADA")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(filaReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(filaReceiver, filter)
+        }
+        
         // Verifica Modo Treinamento
         val prefsApp = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
         val isTreinamento = prefsApp.getBoolean("modo_treinamento", false)
@@ -1470,12 +1803,18 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        atualizarIndicadorFila()
         atualizarDashboard()
+        handlerIndicador.post(runnableIndicador)
     }
 
     override fun onPause() {
         super.onPause()
         isAppForeground = false
+        handlerIndicador.removeCallbacks(runnableIndicador)
+        try {
+            unregisterReceiver(filaReceiver)
+        } catch (e: Exception) { }
     }
 
     private fun mostrarToastCustom(titulo: String, subtitulo: String, tipo: String) {
@@ -1736,6 +2075,7 @@ class MainActivity : AppCompatActivity() {
         btnAdicionar.alpha = if (btnAdicionar.isEnabled) 1.0f else 0.5f
         btnGerarPdf.alpha = if (btnGerarPdf.isEnabled) 1.0f else 0.5f
         btnCompartilhar.alpha = if (btnCompartilhar.isEnabled) 1.0f else 0.5f
+        atualizarIndicadorViagem()
     }
 
     private fun mostrarMenuConfiguracoes(view: View) {
@@ -1875,6 +2215,12 @@ class MainActivity : AppCompatActivity() {
             finish()
         }
 
+        // ITEM NOVO: Sobre o App
+        menuView.findViewById<View>(R.id.itemMenuSobre).setOnClickListener {
+            dialog.dismiss()
+            mostrarSobreApp()
+        }
+
         // --- BLOQUEIOS MODO TREINAMENTO ---
         if (isTreinamento) {
             menuView.findViewById<View>(R.id.itemMenuReenviar).apply {
@@ -1905,13 +2251,7 @@ class MainActivity : AppCompatActivity() {
                         .setTitle("Limpar Dados de Teste?")
                         .setMessage("Deseja apagar os registros feitos durante o treinamento?")
                         .setPositiveButton("Sim, Limpar") { _, _ ->
-                            listaDeViagens.clear()
-                            listaFotosDespesas.clear()
-                            listaDadosDespesas.clear()
-                            fotoIdaPath = null
-                            fotoVoltaPath = null
-                            atualizarListaVisual()
-                            salvarEstado()
+                            resetTotalManual()
                         }
                         .setNegativeButton("Manter", null)
                         .show()
@@ -1987,7 +2327,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun salvarNaPlanilhaGoogle(viagens: List<Viagem>, despesas: List<Despesa> = emptyList(), loteIdExterno: String? = null) {
+    private fun salvarNaPlanilhaGoogle(viagens: List<Viagem>, despesas: List<Despesa> = emptyList(), loteIdExterno: String? = null, isReenvio: Boolean = false) {
         val prefsApp = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
         val isTreinamento = prefsApp.getBoolean("modo_treinamento", false)
 
@@ -2025,7 +2365,16 @@ class MainActivity : AppCompatActivity() {
                     sucesso = true
                     salvarLog("Sucesso", resultado.second, viagens.size, loteId, "PRINCIPAL")
                     runOnUiThread { mostrarToastCustom("Sucesso!", "${viagens.size} viagens enviadas", "sucesso") }
+                    
+                    // Salva cópia para "Reenviar Último Lote" ANTES de limpar
+                    salvarCopiaParaReenvio(viagens, despesas)
+                    marcarLoteComoEnviado(loteId)
+                    
                     mostrarNotificacaoStatus("✅ Sincronização concluída", "${viagens.size} viagens enviadas (Principal)", false)
+                    
+                    if (!isReenvio) {
+                        limparTudoAposSincronizacao()
+                    }
                     break
                 }
             }
@@ -2044,7 +2393,16 @@ class MainActivity : AppCompatActivity() {
                         sucesso = true
                         salvarLog("Sucesso", resultado.second, viagens.size, loteId, "BACKUP")
                         runOnUiThread { mostrarToastCustom("⚠️ Via Backup", "Enviado via backup - verifique a conta principal", "info") }
+                        
+                        // Salva cópia para "Reenviar Último Lote" ANTES de limpar
+                        salvarCopiaParaReenvio(viagens, despesas)
+                        marcarLoteComoEnviado(loteId)
+
                         mostrarNotificacaoStatus("⚠️ Enviado via backup", "Verificar conta principal", false)
+                        
+                        if (!isReenvio) {
+                            limparTudoAposSincronizacao()
+                        }
                         break
                     }
                 }
@@ -2053,8 +2411,12 @@ class MainActivity : AppCompatActivity() {
             // 3. FALHA TOTAL
             if (!sucesso) {
                 salvarLog("Erro", "Falha total em ambas as contas", viagens.size, loteId, "ERRO")
-                runOnUiThread { mostrarToastCustom("Falha Crítica", "Todas as tentativas falharam", "erro") }
-                mostrarNotificacaoStatus("❌ Falha na sincronização", "Não foi possível enviar. Toque para reenviar.", true)
+                runOnUiThread { mostrarToastCustom("Falha Crítica", "Todas as tentativas falharam. Enviando para fila.", "erro") }
+                mostrarNotificacaoStatus("⏳ Sincronização em Espera", "Tentarei enviar automaticamente quando houver conexão.", false)
+                
+                if (!isTreinamento) {
+                    adicionarNaFilaPendente(loteId, viagens, despesas)
+                }
             }
         }.start()
     }
@@ -2071,8 +2433,10 @@ class MainActivity : AppCompatActivity() {
             conn.connectTimeout = 15000 
             conn.readTimeout = 60000    
 
+            val versaoNome = obterVersao().first
             val jsonEnvio = JSONObject().apply {
                 put("loteId", loteId)
+                put("versaoApp", versaoNome)
                 put("viagens", JSONArray().apply {
                     viagens.forEach { v ->
                         put(JSONObject().apply {
@@ -2280,35 +2644,6 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) { e.printStackTrace() }
     }
 
-    private fun salvarCopiaUltimoLote() {
-        if (listaDeViagens.isEmpty()) return
-        val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
-        
-        val arrayV = JSONArray()
-        listaDeViagens.forEach { v ->
-            val obj = JSONObject().apply {
-                put("data", v.data); put("condutor", v.condutor); put("origem", v.origem); put("destino", v.destino)
-                put("hSaida", v.hSaida); put("hChegada", v.hChegada)
-                put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
-                put("observacoes", v.observacoes); put("isEmpresa", v.isEmpresa)
-            }
-            arrayV.put(obj)
-        }
-        
-        val arrayD = JSONArray()
-        listaDadosDespesas.forEach { d ->
-            val obj = JSONObject().apply {
-                put("path", d.path); put("categoria", d.categoria); put("valor", d.valor)
-            }
-            arrayD.put(obj)
-        }
-        
-        prefs.edit()
-            .putString("ultimo_lote_enviado", arrayV.toString())
-            .putString("ultimo_despesas_lote", arrayD.toString())
-            .apply()
-    }
-
     private fun reenviarUltimoLote() {
         try {
             val prefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
@@ -2339,7 +2674,7 @@ class MainActivity : AppCompatActivity() {
             }
             
             Toast.makeText(this, "Reenviando lote anterior...", Toast.LENGTH_SHORT).show()
-            salvarNaPlanilhaGoogle(viagens, despesas)
+            salvarNaPlanilhaGoogle(viagens, despesas, isReenvio = true)
         } catch (e: Exception) {
             reportarErro(e, "Erro ao processar lote salvo")
         }
@@ -2386,7 +2721,8 @@ class MainActivity : AppCompatActivity() {
             text1.text = "$icon ${log.getString("timestamp")} · $destino"
             text1.setTextColor(Color.parseColor(corDestino))
             
-            val msg = "Qtd: ${log.getInt("quantidadeViagens")} | " + log.getString("mensagem")
+            val qtd = if (log.has("quantidadeViagens")) log.getInt("quantidadeViagens") else 0
+            val msg = "Qtd: $qtd | " + log.getString("mensagem")
             text2.text = if (msg.length > 60) msg.take(60) + "..." else msg
             text2.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
             
@@ -2480,8 +2816,24 @@ class MainActivity : AppCompatActivity() {
         return maiorYOffset
     }
 
-    private fun Int.dpToPx(): Int {
-        return (this * resources.displayMetrics.density).toInt()
+    private fun obterVersao(): Pair<String, Int> {
+        return try {
+            val pInfo = packageManager.getPackageInfo(packageName, 0)
+            val versaoNome = pInfo.versionName ?: "?"
+            val versaoCodigo = if (Build.VERSION.SDK_INT >= 28) pInfo.longVersionCode.toInt() else pInfo.versionCode
+            Pair(versaoNome, versaoCodigo)
+        } catch (e: Exception) {
+            Pair("?", 0)
+        }
+    }
+
+    private fun mostrarSobreApp() {
+        val versao = obterVersao()
+        AlertDialog.Builder(this)
+            .setTitle("ControleKM")
+            .setMessage("Versão: ${versao.first}\nBuild: ${versao.second}\nDesenvolvido por: Luiz Gustavo")
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun gerarRelatorioCompleto(viagens: List<Viagem>, isExportacaoHistorico: Boolean = false) {
@@ -2659,7 +3011,6 @@ class MainActivity : AppCompatActivity() {
             if (viagens.isNotEmpty()) {
                 kmGeral = viagens.last().kmFin - viagens.first().kmIni
             }
-            val custoGeral = kmGeral * 1.20
 
             val temParticular = viagens.any { !it.isEmpresa }
             val resumoTotal = if (temParticular) {
@@ -2742,31 +3093,12 @@ class MainActivity : AppCompatActivity() {
 
             try {
                 document.writeTo(FileOutputStream(arquivo))
-                if (!isExportacaoHistorico) {
-                    // Adiciona ao Histórico Permanente (que alimenta o Consumo Semanal)
-                    val prefsLocal = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
-                    val currentUser = auth.currentUser
-                    val historicoKey = if (currentUser != null) "historico_local_${currentUser.uid}" else "historico_geral_local"
-                    val historicoAtual = prefsLocal.getString(historicoKey, "[]")
-                    val arrayHistorico = JSONArray(historicoAtual)
-                    
-                    listaDeViagens.forEach { v ->
-                        val obj = JSONObject().apply {
-                            put("data", v.data); put("condutor", v.condutor); put("origem", v.origem); put("destino", v.destino)
-                            put("hSaida", v.hSaida); put("hChegada", v.hChegada)
-                            put("kmIni", v.kmIni); put("kmFin", v.kmFin); put("custo", v.custo)
-                            put("observacoes", v.observacoes)
-                        }
-                        arrayHistorico.put(obj)
-                    }
-                    prefsLocal.edit().putString(historicoKey, arrayHistorico.toString()).apply()
-
-                    salvarCopiaUltimoLote() // SALVA ANTES DE LIMPAR
-
-                    listaDeViagens.clear()
-                    fotoIdaPath = null
-                    fotoVoltaPath = null
-                    listaFotosDespesas.clear()
+                if (isExportacaoHistorico) {
+                    Toast.makeText(this, "Histórico exportado com sucesso!", Toast.LENGTH_SHORT).show()
+                } else {
+                    // Salva cópia para "Reenviar Último Lote" ANTES de limpar
+                    salvarCopiaParaReenvio(viagens, listaDadosDespesas)
+                    limparTudoAposSincronizacao()
                 }
                 ultimoArquivoGerado = arquivo
                 btnCompartilhar.visibility = View.VISIBLE

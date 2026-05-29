@@ -12,8 +12,8 @@ android {
         applicationId = "com.luiz.controlekm"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -59,6 +59,7 @@ dependencies {
     implementation(libs.mlkit.document.scanner)
     implementation(libs.play.services.location)
     implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation(libs.mpandroidchart)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)

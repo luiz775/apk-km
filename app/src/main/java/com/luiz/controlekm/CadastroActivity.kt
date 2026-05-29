@@ -53,7 +53,7 @@ class CadastroActivity : AppCompatActivity() {
                             "uid" to userId,
                             "nome" to nome,
                             "email" to email,
-                            "data_cadastro" to FieldValue.serverTimestamp()
+                            "data_cadastro" to FieldValue.serverTimestamp(),
                         )
 
                         userId?.let {

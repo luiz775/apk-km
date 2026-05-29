@@ -23,7 +23,7 @@ class ConsumoActivity : AppCompatActivity() {
     private lateinit var containerConsumo: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val themePrefs = getSharedPreferences("DadosApp", Context.MODE_PRIVATE)
+        val themePrefs = getSharedPreferences("DadosApp", MODE_PRIVATE)
         val savedTheme = themePrefs.getInt("tema_preferido", AppCompatDelegate.MODE_NIGHT_YES)
         AppCompatDelegate.setDefaultNightMode(savedTheme)
         super.onCreate(savedInstanceState)
