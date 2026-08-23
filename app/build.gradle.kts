@@ -1,3 +1,11 @@
+import java.util.Properties
+import java.io.FileInputStream
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+localProperties.load(FileInputStream(localPropertiesFile))
+}
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.google.services)
@@ -8,6 +16,10 @@ android {
     namespace = "com.luiz.controlekm"
     compileSdk = 34
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId = "com.luiz.controlekm"
         minSdk = 24
@@ -16,6 +28,9 @@ android {
         versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "SCRIPT_URL_PRINCIPAL", "\"${localProperties.getProperty("SCRIPT_URL_PRINCIPAL", "")}\"")
+        buildConfigField("String", "SCRIPT_URL_BACKUP", "\"${localProperties.getProperty("SCRIPT_URL_BACKUP", "")}\"")
     }
 
     buildTypes {
