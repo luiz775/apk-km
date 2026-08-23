@@ -19,7 +19,7 @@ import kotlinx.coroutines.delay
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     companion object {
-        private const val SCRIPT_URL_PRINCIPAL = "https://script.google.com/macros/s/AKfycbz-vPT7DHjux2zBzc2PAo6a3O99rb4aE70xjdWVtcnNIbR00S1045Fa15lwe-J58Yhs/exec"
+        private val SCRIPT_URL_PRINCIPAL = BuildConfig.SCRIPT_URL_PRINCIPAL
         private const val CHANNEL_ID = "sync_channel_background"
         private val lock = Any()
     }
