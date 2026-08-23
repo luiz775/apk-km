@@ -105,8 +105,8 @@ data class Despesa(
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        private const val SCRIPT_URL_PRINCIPAL = "https://script.google.com/macros/s/AKfycbz-vPT7DHjux2zBzc2PAo6a3O99rb4aE70xjdWVtcnNIbR00S1045Fa15lwe-J58Yhs/exec"
-        private const val SCRIPT_URL_BACKUP = "https://script.google.com/macros/s/AKfycbytcsu5RYHLOB8Tymo9D6nNkXd4inEgu7NdfMSl2I1xpAFHTavJNwFIqCnWum0_QPHKhw/exec"
+                private val SCRIPT_URL_PRINCIPAL = BuildConfig.SCRIPT_URL_PRINCIPAL
+                private val SCRIPT_URL_BACKUP = BuildConfig.SCRIPT_URL_BACKUP
     }
 
     private val auth by lazy { Firebase.auth }
