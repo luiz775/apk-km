@@ -31,6 +31,7 @@ android {
 
         buildConfigField("String", "SCRIPT_URL_PRINCIPAL", "\"${localProperties.getProperty("SCRIPT_URL_PRINCIPAL", "")}\"")
         buildConfigField("String", "SCRIPT_URL_BACKUP", "\"${localProperties.getProperty("SCRIPT_URL_BACKUP", "")}\"")
+        buildConfigField("String", "SYNC_API_SECRET", "\"${localProperties.getProperty("SYNC_API_SECRET", "")}\"")
     }
 
     buildTypes {
