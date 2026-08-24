@@ -149,6 +149,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 put("loteId", loteId)
                 put("viagens", JSONArray(viagensJson))
                 put("despesas", JSONArray(despesasJson))
+                put("apiSecret", BuildConfig.SYNC_API_SECRET)
             }
 
             conn.outputStream.use { it.write(jsonEnvio.toString().toByteArray()) }
