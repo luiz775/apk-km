@@ -2452,6 +2452,7 @@ class MainActivity : AppCompatActivity() {
                         put(JSONObject().apply { put("categoria", d.categoria); put("valor", d.valor) })
                     }
                 })
+                put("apiSecret", BuildConfig.SYNC_API_SECRET)
             }
 
             conn.outputStream.use { os -> os.write(jsonEnvio.toString().toByteArray()) }
