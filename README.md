@@ -1,6 +1,6 @@
 # KM Controller
 
-App Android em **Kotlin** para digitalizar o controle de quilometragem, atendimentos e despesas de técnicos de campo — substituindo planilhas manuais por um fluxo com OCR, geolocalização e sincronização em nuvem.
+App Android em **Kotlin** para digitalizar o controle de quilometragem, atendimentos e despesas de técnicos de campo, substituindo planilhas manuais por um fluxo com OCR, geolocalização e sincronização em nuvem.
 
 Projeto desenvolvido e usado em operação real (ex.: em junho/2026 processou dezenas de viagens, centenas de atendimentos e milhares de km registrados).
 
@@ -52,7 +52,7 @@ app/src/main/java/com/luiz/controlekm/
 
 1. Clone o repositório
 2. Baixe o `google-services.json` no Console do Firebase e coloque em `app/google-services.json`  
-   *(este arquivo **não** é versionado — veja `.gitignore`)*
+   *(este arquivo **não** é versionado. veja `.gitignore`)*
 3. Crie `local.properties` na raiz (além do `sdk.dir` do Android SDK):
 
 ```properties
@@ -76,4 +76,4 @@ SYNC_API_SECRET=seu_segredo
 
 ## Autor
 
-**Luiz Gustavo Marques** — [GitHub](https://github.com/luiz775) · [LinkedIn](https://www.linkedin.com/in/luiz-gustavo140694/)
+**Luiz Gustavo Marques**  [GitHub](https://github.com/luiz775) · [LinkedIn](https://www.linkedin.com/in/luiz-gustavo140694/)
